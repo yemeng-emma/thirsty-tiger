@@ -1,0 +1,87 @@
+---
+title: "Deriving CQC data set to send to Skills for Care"
+author: "Meng Ye"
+date: "9/23/2022"
+output:
+  html_document: default
+  pdf_document: default
+  word_document: default
+---
+
+
+
+This chunk loads all the packages to use
+
+```{r load package, message=FALSE, warning=FALSE}
+library(tidyverse) # package for data cleaning and plotting
+```
+
+
+
+## Data Preparation
+
+First, import the sampled and coded data set
+
+```{r import data, message=FALSE, warning=FALSE}
+#import the raw data file
+socialcare_raw <- read_csv("data/sample_new_cleaned.csv")
+```
+
+Assign orders to the ordinal level variables and name the organizational form in a reader-friendly way. 
+
+```{r data cleaning}
+#select relevant columns, rename and relabel 
+socialcare <- socialcare_raw %>% 
+# recode legal form types to be more readable / easier to present
+  mutate(form = case_when(form_num == 1 ~ "FPO",
+                          form_num == 2 ~ "NPO",
+                          form_num == 3 ~ "GOV",
+                          form_num == 4 ~ "CIC",
+                          form_num == 5 ~ "IND",
+                          TRUE ~ NA_character_)) 
+
+# show first several rows of the data set derived 
+head(socialcare)
+
+```
+
+
+```{r}
+#select useful columns
+socialcare_cqc <- socialcare %>% 
+  select(index,
+         location_id,  location_name = `Location Name`,
+         provider_id = `Provider ID`, provider_name, 
+         form, 
+         cic_type,
+         care_home = `Care Home`,
+         primary_cat, 
+         region,
+         service_group = `Service / Population Group`,
+         domain, rating, publication_date, inherited)
+```
+
+
+```{r}
+# complete column names
+colnames(socialcare)
+```
+
+
+```{r}
+# trimmed column names
+colnames(socialcare_cqc)
+
+```
+
+
+```{r, echo = FALSE}
+write.csv(socialcare_cqc, file = "data/socialcare_cqc.csv")
+```
+
+## End
+
+end of document updated on 9/23/2022
+
+
+

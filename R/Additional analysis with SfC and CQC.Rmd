@@ -1,0 +1,272 @@
+---
+title: "Addtional Analysis with SfC and CQC data"
+author: "Meng Ye"
+date: "2/19/2023"
+output:
+  html_document: default
+  pdf_document: default
+  word_document: default
+---
+
+```{r contr}
+# environment setup to run ordered logit properly
+options(contrasts = rep("contr.treatment", 2))
+```
+
+
+This chunk loads all the packages to use
+
+```{r load package, message=FALSE, warning=FALSE}
+#packages for ordered logit
+library(tidyverse) # package for data cleaning and plotting
+library(readxl) # package for reading excel file
+library(broom) # extracting model summary as data frame
+library(modelsummary) # deriving model tables
+library(scales) # label percent
+library(lubridate) # working with dates
+library(marginaleffects) #to calculate marginal effects
+
+library(ordinal) # package for ordinal logit regression
+
+```
+
+
+
+## Data Preparation
+
+First, import the sampled and coded data set
+
+```{r import data, message=FALSE, warning=FALSE}
+#import the raw data file
+socialcare_sk <- read_csv("data/cqc_sfc_cleaned.csv")
+```
+
+
+```{r}
+socialcare <- socialcare_sk %>% 
+# recode legal form types to be more readable / easier to present
+  mutate(inherited = ifelse(inherited == "Y", TRUE, FALSE),
+         rating = recode(rating, 
+                         "Insufficient evidence to rate" = "NA",
+                         "Requires improvement" = "Req improv")) %>% 
+  # set the order of the values in the factors 
+  mutate(form = ordered(form, levels = c("FPO", "NPO", "GOV", "CIC", "IND")),
+         
+  # assume the order of the ratings as follows but need to double check with the source 
+         rating = ordered(rating, levels = c("Inadequate","Req improv", "Good", "Outstanding"))) %>%
+  
+  # adding the rating data coded as numerical
+  mutate(rating_num = case_when(rating == "Inadequate" ~ 1,
+                                rating == "Req improv" ~ 2,
+                                rating == "Good" ~ 3,
+                                rating == "Outstanding" ~ 4)) %>% 
+  
+  mutate(category = case_when(primary_cat == "Community based adult social care services" ~ "community",
+                              primary_cat == "Residential social care" ~ "residential",
+                              TRUE ~ as.character(NA)),
+
+         # deriving year column and dummy variable for before_covid
+         year = year(publication_date),
+         after_covid = ifelse(year >= 2020, TRUE, FALSE),
+         before_covid = ifelse(year <= 2019, TRUE, FALSE)) %>%
+
+  # converting the ordinal variable to numerical 
+  mutate(rating_num = case_when(rating == "Inadequate" ~ 1,
+                                rating == "Req improv" ~ 2,
+                                rating == "Good" ~ 3,
+                                rating == "Outstanding" ~ 4)) %>% 
+  # derive the rating dummy
+  mutate(rating_higher = ifelse(rating_num > 2, 1, 0))
+```
+
+
+
+## Running OLS models 
+
+The OLS models and the ordered logit models can be written as follows
+
+$rating_{numerical} = \beta_0 + \beta_1form + \beta_2category+ \beta_3region + \beta_4inherited + u$
+
+$log-odds(rating_{ordinal} \leq j) = \beta_{j0} + \beta_1form + \beta_2category+ \beta_3region + \beta_4inherited + u$
+
+In this section, we first run the OLS models. In the OLS models, we kind of "cheat" R by treating the four rating levels with orders as if they are numbers 1-4. There are the flowing reasons that we report the results from OLS models, even though the more suitable methods should be ordered logit models, about which we will discuss in a while.
+
+1) The purpose of fitting OLS models is to use them as benchmarks. 
+2) Since there are issues like heteroscedasticity, the standard errors calculated are not reliable. But the correlation relationships between the independent variables and dependent variables are still true. So the results are still informative 
+3) Plus, compared with the ordered logit models we run later, the results are more straightforward, and more easily give us intuition about how different legal forms of social care providers impact the service quality ratings. 
+4) The OLS models are intended to be compared with the ordered logit models. As shown later, the results are generally consistent between the two model families, confirming that our model specification is robust between different models.
+
+
+
+### OLS with the sub-domain ratings one by one 
+
+```{r}
+# run the model loops with nest() method
+models_ols <- socialcare %>% 
+  group_by(domain) %>% 
+  nest()%>% 
+  mutate(ols_models = map(data, 
+                          ~lm(rating_num ~ form + age + capacity +
+                              category + region + inherited , 
+                              data = .x))) %>% 
+  mutate(results = map(ols_models, ~tidy(.x, conf.int = TRUE))) %>% 
+  pull(ols_models, name = domain)
+```
+
+```{r}
+# run the model loops with nest() method
+# add before_covid as control
+# add also interaction term
+table_ols <- modelsummary(models_ols, statistic = "({p.value}) {stars}")
+table_ols
+```
+
+
+
+```{r}
+# run the model loops with nest() method
+# add after_covid as control
+models_ols_covid <- socialcare %>% 
+  group_by(domain) %>% 
+  nest()%>% 
+  mutate(ols_models = map(data, 
+                          ~lm(rating_num ~ form + after_covid + 
+                              category + region + inherited, 
+                              data = .x))) %>% 
+  mutate(results = map(ols_models, ~tidy(.x, conf.int = TRUE))) %>% 
+  pull(ols_models, name = domain) 
+```
+
+
+```{r}
+table_ols_covid <- modelsummary(models_ols_covid, statistic = "({p.value}) {stars}")
+table_ols_covid
+```
+
+
+
+## ordered logit models 
+
+
+### whole model without control 
+
+```{r }
+model_order_overall <- clm(rating ~ form + category + region + inherited,
+                data = filter(socialcare, domain == "Overall"),
+                link = "logit")
+model_order_safe <- clm(rating ~ form + category + region + inherited + age + capacity,
+                data = filter(socialcare, domain == "Safe"),
+                link = "logit")
+model_order_effective <- clm(rating ~ form + category + region + inherited + age + capacity,
+                data = filter(socialcare, domain == "Effective"),
+                link = "logit")
+model_order_caring <- clm(rating ~ form + category + region + inherited + age + capacity,
+                data = filter(socialcare, domain == "Caring"),
+                link = "logit")
+model_order_well_led <- clm(rating ~ form + category + region + inherited + age + capacity,
+                data = filter(socialcare, domain == "Well-led"),
+                link = "logit")
+model_order_responsive <- clm(rating ~ form + category + region + inherited + age + capacity,
+                data = filter(socialcare, domain == "Responsive"),
+                link = "logit")
+```
+
+
+
+
+```{r}
+ordinal_models <- modelsummary(list("overall" = model_order_overall, "safe" = model_order_safe, 
+                                    "effective" = model_order_effective, "caring"= model_order_caring, 
+                                    "well-led" = model_order_well_led, "responsive" = model_order_responsive),
+                               coef_omit = "region", exponentiate = F,
+                               statistic = "({p.value}) {stars}")
+ordinal_models
+```
+
+
+
+```{r}
+ordinal_models_exp <- modelsummary(list("overall" = model_order_overall, "safe" = model_order_safe, 
+                                    "effective" = model_order_effective, "caring"= model_order_caring, 
+                                    "well-led" = model_order_well_led, "responsive" = model_order_responsive),
+                               coef_omit = "region", exponentiate = T,
+                               statistic = "({p.value}) {stars}")
+ordinal_models_exp
+```
+
+
+### whole model with control 
+
+
+```{r }
+model_order_overall_covid <- clm(rating ~ form + after_covid + age + capacity + 
+                                   category + region + inherited,
+                data = filter(socialcare, domain == "Overall"),
+                link = "logit")
+model_order_safe_covid <- clm(rating ~ form + after_covid + age + capacity + 
+                                category + region + inherited,
+                data = filter(socialcare, domain == "Safe"),
+                link = "logit")
+model_order_effective_covid <- clm(rating ~ form + after_covid + age + capacity + 
+                                     category + region + inherited,
+                data = filter(socialcare, domain == "Effective"),
+                link = "logit")
+model_order_caring_covid <- clm(rating ~ form + after_covid + age + capacity + 
+                                  category + region + inherited,
+                data = filter(socialcare, domain == "Caring"),
+                link = "logit")
+model_order_well_led_covid <- clm(rating ~ form + after_covid + age + capacity + 
+                                    category + region + inherited,
+                data = filter(socialcare, domain == "Well-led"),
+                link = "logit")
+model_order_responsive_covid <- clm(rating ~ form + after_covid + age + capacity + 
+                                      category + region + inherited,
+                data = filter(socialcare, domain == "Responsive"),
+                link = "logit")
+```
+
+
+```{r}
+ordinal_models_covid <- modelsummary(list("overall" = model_order_overall_covid, "safe" = model_order_safe_covid, 
+                                    "effective" = model_order_effective_covid, "caring"= model_order_caring_covid, 
+                                    "well-led" = model_order_well_led_covid, "responsive" = model_order_responsive_covid),
+                               coef_omit = "region", exponentiate = F,
+                               statistic = "({p.value}) {stars}")
+ordinal_models_covid
+```
+
+
+```{r}
+ordinal_models_covid_exp <- modelsummary(list("overall" = model_order_overall_covid, "safe" = model_order_safe_covid, 
+                                    "effective" = model_order_effective_covid, "caring"= model_order_caring_covid, 
+                                    "well-led" = model_order_well_led_covid, "responsive" = model_order_responsive_covid),
+                               coef_omit = "region", exponentiate = T,
+                               statistic = "({p.value}) {stars}")
+ordinal_models_covid_exp
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

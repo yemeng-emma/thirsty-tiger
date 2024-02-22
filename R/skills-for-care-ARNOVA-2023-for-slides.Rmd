@@ -1,0 +1,153 @@
+---
+title: "Skills-for-care analysis ARNOVA 2023"
+author: "Meng Ye"
+date: "2023-11-03"
+output:
+  word_document: default
+  html_document: default
+---
+
+```{r contr}
+# environment setup to run ordered logit properly
+options(contrasts = rep("contr.treatment", 2))
+```
+
+
+This chunk loads all the packages to use
+
+```{r load package, message=FALSE, warning=FALSE}
+#packages for ordered logit
+library(tidyverse) # package for data cleaning and plotting
+library(readxl) # package for reading excel file
+library(broom) # extracting model summary as data frame
+library(modelsummary) # deriving model tables
+library(scales) # label percent
+library(lubridate) # working with dates
+library(marginaleffects) #to calculate marginal effects
+library(ordinal) # package for ordinal logit regression
+```
+
+
+
+## Data Preparation
+
+First, import the sampled and coded data set
+
+```{r import data, message=FALSE, warning=FALSE}
+#import the raw data file
+cqc_skills <- read_csv("data/cleaned_sfc_ipw.csv") %>% 
+  mutate(form = fct_relevel(form, "FPO"),
+         rating = factor(rating),
+         Year = factor(year),
+         during_covid = after_covid,
+         staff_level = staff_level/100) %>% 
+  mutate(rating = ordered(rating, levels = c("Inadequate","Req improv", "Good", "Outstanding"))) %>% 
+     filter(form!="NA" & rating!="NA") 
+
+```
+
+
+
+
+
+## Detailes about new variables 
+
+
+- About turnover rate
+
+
+`Employee turnover` rate is the percent of employees who leave a company within a specific time period. Turnover rate is commonly calculated by month, quarter, or year and includes both voluntary and involuntary losses.
+
+
+$$
+\text{Employee turnover rate} = \frac{\text{Number of employees who left}}{\text{Average number of employees}} \times 100
+$$
+
+
+
+$$
+\text{Average number of employees} = \frac{\text{(Headcount at the begining of the timeframe + headcount at the end of the timeframe)}}{2}
+$$
+
+
+
+
+
+## Modeling on rating with staff control
+
+```{r }
+model_order <- clm(rating ~ form  + category + region + during_covid,
+                data = filter(cqc_skills, domain == "Overall"),
+                link = "logit")
+
+model_order_weighted <- clm(rating ~ form + category + region + during_covid,
+                data = filter(cqc_skills, domain == "Overall"),
+                link = "logit",
+                weights = ipw)
+
+model_order_weighted2 <- clm(rating ~ form + category + region + during_covid,
+                data = filter(cqc_skills, domain == "Overall"),
+                link = "logit",
+                weights = ipw_short)
+
+
+model_staff <- lm(staff_level ~ form + category + region + during_covid,
+                data = filter(cqc_skills, domain == "Overall"))
+
+model_staff_weighted <- lm(staff_level ~ form + category + region + during_covid,
+                data = filter(cqc_skills, domain == "Overall"),
+                weights = ipw)
+
+staff_direct_order <- clm(rating ~ form + staff_level + category + region + during_covid,
+                data = filter(cqc_skills, domain == "Overall"),
+                link = "logit")
+staff_direct_order_weighted <- clm(rating ~ form + staff_level + category + region + during_covid,
+                data = filter(cqc_skills, domain == "Overall"),
+                link = "logit",
+                weights = ipw)
+```
+
+
+
+
+```{r}
+staff_models <- modelsummary(list("full" = model_order, "full weighted" = model_order_weighted, 
+                                  "full weighted 2" = model_order_weighted2, 
+                                    "staffing" = model_staff, "staffing weighted"= model_staff_weighted, 
+                                    "direct" = staff_direct_order, "direct weighted" = staff_direct_order_weighted),
+                               coef_omit = "region", exponentiate = F,
+                               statistic = "({p.value}) {stars}")
+staff_models
+```
+
+# Modeling on rating with turnover
+
+```{r }
+
+model_turnover <- lm(turnover ~ form + category + region + during_covid,
+                data = filter(cqc_skills, domain == "Overall"))
+
+model_turnover_weighted <- lm(turnover ~ form + category + region + during_covid,
+                data = filter(cqc_skills, domain == "Overall"),
+                weights = ipw)
+
+turnover_direct_order <- clm(rating ~ form + turnover + category + region + during_covid,
+                data = filter(cqc_skills, domain == "Overall"),
+                link = "logit")
+turnover_direct_order_weighted <- clm(rating ~ form + turnover + category + region + during_covid,
+                data = filter(cqc_skills, domain == "Overall"),
+                link = "logit",
+                weights = ipw)
+```
+
+
+
+
+```{r}
+staff_models <- modelsummary(list("full" = model_order, "full weighted" = model_order_weighted, 
+                                    "turnover" = model_turnover, "turnover weighted"= model_turnover_weighted, 
+                                    "direct" = turnover_direct_order, "direct weighted" = turnover_direct_order_weighted),
+                               coef_omit = "region", exponentiate = F,
+                               statistic = "({p.value}) {stars}")
+staff_models
+```

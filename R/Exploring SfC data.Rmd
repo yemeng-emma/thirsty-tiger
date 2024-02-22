@@ -1,0 +1,180 @@
+---
+title: "Exploring Skills for Care Data"
+author: "Meng Ye"
+date: "9/29/2022"
+output:
+  word_document: default
+  pdf_document: default
+  html_document: default
+---
+
+### Setting up
+```{r load package, message=FALSE, warning=FALSE}
+#packages for ordered logit
+library(ordinal) # package for ordinal logit regression
+library(brant) # brant test for the parallel assumption for ordered logit
+library(MASS) # models that work with the brant test
+
+library(tidyverse) # package for data cleaning and plotting
+library(readxl) # package for reading excel file
+library(broom) # extracting model summary as data frame
+library(modelsummary) # deriving model tables
+library(scales) # label percent
+library(lubridate) # working with dates
+```
+
+```{r contr}
+# environment setup to run ordered logit properly
+options(contrasts = rep("contr.treatment", 2))
+```
+
+### Import data and exploration 
+
+```{r import data, message=FALSE, warning=FALSE}
+#import the raw data file
+skills_cqc <- read_excel("data/SfC_CQC.xlsx")
+form_full <- read_csv("data/form_full.csv")
+```
+
+
+
+Check the distribution of different forms
+```{r}
+form_sub <- skills_cqc %>% 
+  group_by(establishmentid) %>% 
+  summarise(form = first(form)) %>% 
+  count(form)
+form_sub
+```
+
+Derive the table to compare the distributions
+```{r}
+form_full <- form_full %>% 
+  select(form, 
+         count_full = n)
+```
+
+
+```{r}
+form_compare <- form_sub %>% 
+  filter(form != "NA") %>% 
+  select(form, 
+         count_sub = n) %>% 
+  left_join(form_full, by = "form") %>% 
+  mutate(ratio = count_sub/count_full) %>% 
+  mutate(pct = label_percent(accuracy = 0.1)(ratio))
+
+form_compare
+```
+
+
+### Run Toy Models
+
+Prepare data for analysis
+
+```{r}
+#select relevant columns, rename and relabel 
+skills_cqc <- skills_cqc %>% 
+# recode legal form types to be more readable / easier to present
+  mutate(inherited = ifelse(inherited == "Y", TRUE, FALSE),
+         rating = recode(rating, 
+                         "Insufficient evidence to rate" = "NA",
+                         "Requires improvement" = "Req improv")) %>% 
+  # set the order of the values in the factors 
+  mutate(form = ordered(form, levels = c("FPO", "NPO", "GOV", "CIC", "IND")),
+         
+  # assume the order of the ratings as follows but need to double check with the source 
+         rating = ordered(rating, levels = c("Inadequate","Req improv", "Good", "Outstanding"))) %>%
+  
+  # adding the rating data coded as numerical
+  mutate(rating_num = case_when(rating == "Inadequate" ~ 1,
+                                rating == "Req improv" ~ 2,
+                                rating == "Good" ~ 3,
+                                rating == "Outstanding" ~ 4)) %>% 
+  
+  mutate(category = case_when(primary_cat == "Community based adult social care services" ~ "community",
+                              primary_cat == "Residential social care" ~ "residential",
+                              TRUE ~ as.character(NA)),
+         year = year(publication_date),
+         before_covid = ifelse(year < 2020, TRUE, FALSE)) 
+  
+
+# show first several rows of the data set derived 
+head(skills_cqc)
+```
+
+
+Check the distribution by years
+
+```{r}
+skills_cqc %>% count(year, before_covid)
+```
+
+
+Check simple differences in means: seems consistent with our earlier findings
+
+```{r}
+simple_model <- lm(rating_num ~ form, data = skills_cqc)
+summary(simple_model)
+```
+Running simple difference of means between CIC sub-types
+
+```{r}
+simple_cic <- lm(rating_num ~ cic_type, data = skills_cqc)
+summary(simple_cic)
+```
+Again CIC as for-profit with shares (S type) has lower rating, but not significant. The NA group (those are not CICs) difference is significant, as expected. 
+
+
+### Run the same models as in the full CQC data set
+
+```{r}
+# run the model loops with nest() method
+model_list <- skills_cqc %>% 
+  group_by(domain) %>% 
+  nest()%>% 
+  mutate(ols_models = map(data, 
+                          ~lm(rating_num ~ form + 
+                              category + region + inherited + before_covid, 
+                              data = .x))) %>% 
+  mutate(results = map(ols_models, ~tidy(.x, conf.int = TRUE))) 
+```
+
+
+Derive the OLS results table
+
+I first print out the order of the domain names to match with summary table.
+
+```{r}
+models_named <- model_list %>% 
+  pull(ols_models, name = domain)
+```
+
+
+```{r}
+table_ols <- modelsummary(models_named, statistic = "({p.value}) {stars}")
+table_ols
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

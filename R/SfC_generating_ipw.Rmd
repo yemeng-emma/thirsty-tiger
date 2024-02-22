@@ -1,0 +1,284 @@
+---
+title: "Data Cleaning for Skills for Care Paper"
+author: "Meng Ye"
+date: "11/8/2023"
+output:
+  html_document: default
+  pdf_document: default
+  word_document: default
+---
+
+## Read me
+
+This is the data cleaning file for generating ipw for the CQC locations selecting into Skills for Care data set. The overall steps is as follows
+
+1. Take the anonymized combined CQC-SfC data, generate a dummy variable based on whether SfC establishment_id is NA or not, `select_in` 
+2. Filter out the Overall rating rows and calculate the ipw at the location level
+3. Run the logit regression model of `select_in` and calculate the ipw
+4. Derive the sub-dataframe of and `establishment_id` and `ipw`
+5. Import the cleaned SfC from last year 
+6. Merge the ipw data-frame to the cleaned SfC data
+
+
+## Setting up
+
+```{r load package, message=FALSE, warning=FALSE}
+library(tidyverse) # package for data cleaning and plotting
+library(readxl) # package for reading excel file
+library(broom) # extracting model summary as data frame
+library(modelsummary) # deriving model tables
+library(scales) # label percent
+library(lubridate) # working with dates
+```
+
+```{r contr}
+# environment setup to run ordered logit properly
+options(contrasts = rep("contr.treatment", 2))
+```
+
+## Import data 
+
+```{r import data, message=FALSE, warning=FALSE}
+#import the raw data file
+cqc_skills <- read_excel("data/SfC_CQC.xlsx")
+skills_raw <- read_csv("data/Skills_raw.csv")
+```
+
+
+```{r import cleaned cqc data, message=FALSE, warning=FALSE}
+#import the cleaned skills for care data
+cleaned_cqc_skills <- read_csv("data/cqc_sfc_cleaned.csv")
+```
+
+
+## Data Cleaning for CQC_skills combined data set 
+
+```{r}
+#select the CQC data that has Skills for Care establishment id
+cqc <- cqc_skills %>% 
+  mutate(select_in = ifelse(!is.na(establishmentid), 1, 0)) %>% 
+    mutate(inherited = ifelse(inherited == "Y", TRUE, FALSE),
+         rating = recode(rating, 
+                         "Insufficient evidence to rate" = "NA",
+                         "Requires improvement" = "Req improv")) %>% 
+  # set the order of the values in the factors 
+  mutate(form = fct_relevel(form, "FPO"),
+         
+  # assume the order of the ratings as follows but need to double check with the source 
+         rating = ordered(rating, levels = c("Inadequate","Req improv", "Good", "Outstanding"))) %>%
+  
+  # adding the rating data coded as numerical
+  mutate(rating_num = case_when(rating == "Inadequate" ~ 1,
+                                rating == "Req improv" ~ 2,
+                                rating == "Good" ~ 3,
+                                rating == "Outstanding" ~ 4)) %>% 
+  
+  mutate(category = case_when(primary_cat == "Community based adult social care services" ~ "community",
+                              primary_cat == "Residential social care" ~ "residential",
+                              TRUE ~ as.character(NA)),
+
+         # deriving year column and dummy variable for before_covid
+         year = year(publication_date),
+         Year = factor(year),
+         after_covid = ifelse(year >= 2020, TRUE, FALSE),
+         before_covid = ifelse(year <= 2019, TRUE, FALSE))
+
+head(cqc)
+```
+
+
+## derive overall rating sub data frame
+
+```{r}
+cqc_overall <- cqc %>%
+  filter(domain == "Overall")
+```
+
+## Run logit model and calculate ipw
+
+```{r}
+model_select <- glm(select_in ~ form + category + region + 
+                    publication_date + inherited + rating_num,
+                    data = cqc_overall,
+                    family = binomial(link = "logit"))
+
+tidy(model_select)
+```
+
+
+
+## Calculate IPW
+
+
+```{r}
+ipw_data <- augment_columns(model_select,
+                            cqc_overall,
+                            type.predict = "response") %>% 
+            rename(propensity = .fitted) %>% 
+            mutate(ipw = (select_in / propensity) + (1 - select_in) / (1 - propensity)) %>% 
+            select(establishmentid, ipw) %>% 
+            filter(establishmentid != "NA") %>% 
+            group_by(establishmentid) %>% 
+            slice(1)
+```
+
+
+```{r}
+model_select_short <- glm(select_in ~ form +  rating_num,
+                    data = cqc_overall,
+                    family = binomial(link = "logit"))
+
+tidy(model_select_short)
+
+ipw_data_short <- augment_columns(model_select_short,
+                            cqc_overall,
+                            type.predict = "response") %>% 
+            rename(propensity = .fitted) %>% 
+            mutate(ipw_short = (select_in / propensity) + (1 - select_in) / (1 - propensity)) %>% 
+            select(establishmentid, ipw_short) %>% 
+            filter(establishmentid != "NA") %>% 
+            group_by(establishmentid) %>% 
+            slice(1)
+```
+
+```{r}
+ipw_data <- ipw_data %>% 
+  left_join(ipw_data_short, by = "establishmentid")
+
+cqc_overall <- cqc_overall %>%
+  left_join(ipw_data, by = "establishmentid")
+```
+
+
+
+
+## Merge the ipw data into the cleaned, CQC-Skills for care data
+
+```{r}
+cleaned_sfc <- cleaned_cqc_skills %>% 
+  left_join(ipw_data, by = "establishmentid") %>% 
+    mutate(inherited = ifelse(inherited == "Y", TRUE, FALSE),
+         rating = recode(rating, 
+                         "Insufficient evidence to rate" = "NA",
+                         "Requires improvement" = "Req improv")) %>% 
+  # set the order of the values in the factors 
+  mutate(form = fct_relevel(form, "FPO"),
+         
+  # assume the order of the ratings as follows but need to double check with the source 
+         rating = ordered(rating, levels = c("Inadequate","Req improv", "Good", "Outstanding"))) %>%
+  
+  # adding the rating data coded as numerical
+  mutate(rating_num = case_when(rating == "Inadequate" ~ 1,
+                                rating == "Req improv" ~ 2,
+                                rating == "Good" ~ 3,
+                                rating == "Outstanding" ~ 4)) %>% 
+  
+  mutate(category = case_when(primary_cat == "Community based adult social care services" ~ "community",
+                              primary_cat == "Residential social care" ~ "residential",
+                              TRUE ~ as.character(NA)),
+
+         # deriving year column and dummy variable for before_covid
+         year = year(publication_date),
+         Year = factor(year),
+         after_covid = ifelse(year >= 2020, TRUE, FALSE),
+         before_covid = ifelse(year <= 2019, TRUE, FALSE))
+
+```
+
+
+## Save data
+
+```{r save data}
+# write.csv(cleaned_sfc, file = "data/cleaned_sfc_ipw.csv")  
+```
+
+
+## Data overview - derive CQC-SFC compare tables
+
+### build a data frame to derive the tables
+
+```{r}
+ipw_for_graphing <- cqc_overall %>% 
+            mutate(SfC = ifelse(select_in == 1, TRUE, FALSE),
+                   weighted_rating_num = rating_num * ipw,
+                   weighted_rating_num_short = rating_num * ipw_short) %>% 
+   filter(form!="NA" & rating!="NA")
+```
+
+
+
+```{r}
+datasummary(form * (1 + rating + rating_num + weighted_rating_num+ weighted_rating_num_short) ~ (1 + SfC ) *(1 + Mean),
+            data = ipw_for_graphing,
+            fmt = 2)
+```
+
+
+
+```{r message=FALSE, warning=FALSE}
+sfc_count <- ipw_for_graphing %>%
+  filter(select_in == TRUE) %>% 
+  group_by(form, rating) %>%
+  summarize(SfC = n(),
+            SfC_weighted = sum(ipw, na.rm = TRUE),
+            SfC_weighted_short = sum(ipw_short, na.rm = TRUE)) %>% 
+  ungroup() %>% 
+    filter(form!="NA")
+sfc_count
+```
+
+
+```{r}
+cqc_count <- ipw_for_graphing %>%
+  group_by(form, rating) %>%
+  summarize(CQC = n()) %>% 
+  left_join(sfc_count, by = c("form", "rating")) %>% 
+  ungroup() %>% 
+  filter(form!="NA") %>%
+  mutate(ratio = SfC/CQC) %>% 
+  ungroup()
+cqc_count
+```
+
+```{r}
+sfc_joint <- ipw_for_graphing %>%
+  filter(select_in == TRUE) %>% 
+  group_by(form) %>%
+  summarize(SfC = n(),
+            SfC_weighted = sum(ipw, na.rm = TRUE))
+```
+
+```{r}
+cqc_joint <- ipw_for_graphing %>%
+  group_by(form) %>%
+  summarize(CQC = n()) %>% 
+  left_join(sfc_joint, by = "form") %>% 
+  ungroup() %>% 
+  filter(form!="NA") %>%
+  mutate(ratio = SfC/CQC)
+cqc_joint
+```
+
+
+
+## Analysis with the sub-set with ipw
+
+
+```{r}
+model_simple <- lm(rating_num ~ form + category + Year + region,
+                   data = filter(cleaned_sfc, domain == "Overall"),
+                   weights = ipw)
+
+tidy(model_simple)
+```
+
+```{r}
+model_cqc <- lm(rating_num ~ form + category + Year + region,
+                   data = filter(cqc, domain == "Overall"))
+
+tidy(model_cqc)
+```
+
+
+
+

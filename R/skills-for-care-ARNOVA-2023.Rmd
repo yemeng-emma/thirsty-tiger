@@ -1,0 +1,301 @@
+---
+title: "Skills-for-care analysis ARNOVA 2023"
+author: "Meng Ye"
+date: "2023-11-03"
+output: html_document
+---
+
+```{r contr}
+# environment setup to run ordered logit properly
+options(contrasts = rep("contr.treatment", 2))
+```
+
+
+This chunk loads all the packages to use
+
+```{r load package, message=FALSE, warning=FALSE}
+#packages for ordered logit
+library(tidyverse) # package for data cleaning and plotting
+library(readxl) # package for reading excel file
+library(broom) # extracting model summary as data frame
+library(modelsummary) # deriving model tables
+library(scales) # label percent
+library(lubridate) # working with dates
+library(marginaleffects) #to calculate marginal effects
+library(ordinal) # package for ordinal logit regression
+```
+
+
+
+## Data Preparation
+
+First, import the sampled and coded data set
+
+```{r import data, message=FALSE, warning=FALSE}
+#import the raw data file
+cqc_skills <- read_csv("data/cleaned_sfc_ipw.csv") %>% 
+  mutate(form = fct_relevel(form, "FPO"),
+         rating = factor(rating),
+         Year = factor(year),
+         during_covid = after_covid,
+         staff_level = staff_level/100)
+```
+
+
+
+
+
+## Detailes about new variables 
+
+
+- About turnover rate
+
+
+`Employee turnover` rate is the percent of employees who leave a company within a specific time period. Turnover rate is commonly calculated by month, quarter, or year and includes both voluntary and involuntary losses.
+
+
+$$
+\text{Employee turnover rate} = \frac{\text{Number of employees who left}}{\text{Average number of employees}} \times 100
+$$
+
+
+
+$$
+\text{Average number of employees} = \frac{\text{(Headcount at the begining of the timeframe + headcount at the end of the timeframe)}}{2}
+$$
+
+
+
+
+## ordered logit models 
+
+## Modeling on rating withough staff control
+
+```{r }
+model_order_overall <- clm(rating ~ form + category + region + during_covid + utility,
+                data = filter(cqc_skills, domain == "Overall"),
+                link = "logit",
+                weights = ipw)
+
+model_order_safe <- clm(rating ~ form + category + region + during_covid + utility,
+                data = filter(cqc_skills, domain == "Safe"),
+                link = "logit",
+                weights = ipw)
+
+model_order_effective <- clm(rating ~ form + category + region + during_covid + utility,
+                data = filter(cqc_skills, domain == "Effective"),
+                link = "logit",
+                weights = ipw)
+
+model_order_caring <- clm(rating ~ form + category + region + during_covid + utility,
+                data = filter(cqc_skills, domain == "Caring"),
+                link = "logit",
+                weights = ipw)
+
+model_order_well_led <- clm(rating ~ form + category + region + during_covid + utility,
+                data = filter(cqc_skills, domain == "Well-led"),
+                link = "logit",
+                weights = ipw)
+
+model_order_responsive <- clm(rating ~ form + category + region + during_covid + utility,
+                data = filter(cqc_skills, domain == "Responsive"),
+                link = "logit",
+                weights = ipw)
+```
+
+
+
+
+```{r}
+ordinal_models <- modelsummary(list("overall" = model_order_overall, "safe" = model_order_safe, 
+                                    "effective" = model_order_effective, "caring"= model_order_caring, 
+                                    "well-led" = model_order_well_led, "responsive" = model_order_responsive),
+                               coef_omit = "region", exponentiate = F,
+                               statistic = "({p.value}) {stars}")
+ordinal_models
+```
+
+
+
+
+
+
+## Modeling on staffing
+
+```{r}
+model_staff_overall <- lm(staff_level ~ form + category + region + during_covid + utility,
+                data = filter(cqc_skills, domain == "Overall"),
+                weights = ipw)
+
+model_staff_safe <- lm(staff_level ~ form + category + region + during_covid + utility,
+                data = filter(cqc_skills, domain == "Safe"),
+                weights = ipw)
+
+model_staff_effective <- lm(staff_level ~ form + category + region + during_covid + utility,
+                data = filter(cqc_skills, domain == "Effective"),
+                weights = ipw)
+
+model_staff_caring <- lm(staff_level ~ form + category + region + during_covid + utility,
+                data = filter(cqc_skills, domain == "Caring"),
+                weights = ipw)
+
+model_staff_well_led <- lm(staff_level ~ form + category + region + during_covid + utility,
+                data = filter(cqc_skills, domain == "Well-led"),
+                weights = ipw)
+
+model_staff_responsive <- lm(staff_level ~ form + category + region + during_covid + utility,
+                data = filter(cqc_skills, domain == "Responsive"),
+                weights = ipw)
+```
+
+
+```{r}
+staff_models <- modelsummary(list("overall" = model_staff_overall, "safe" = model_staff_safe, 
+                                    "effective" = model_staff_effective, "caring"= model_staff_caring, 
+                                    "well-led" = model_staff_well_led, "responsive" = model_staff_responsive),
+                               coef_omit = "region", exponentiate = F,
+                               statistic = "({p.value}) {stars}")
+staff_models
+```
+
+## Modeling on staffing level direct effects
+
+```{r }
+model_staff_direct_overall <- clm(rating ~ form + category + region + during_covid + utility + staff_level,
+                data = filter(cqc_skills, domain == "Overall"),
+                link = "logit",
+                weights = ipw)
+
+model_staff_direct_safe <- clm(rating ~ form + category + region + during_covid + utility + staff_level,
+                data = filter(cqc_skills, domain == "Safe"),
+                link = "logit",
+                weights = ipw)
+
+model_staff_direct_effective <- clm(rating ~ form + category + region + during_covid + utility + staff_level,
+                data = filter(cqc_skills, domain == "Effective"),
+                link = "logit",
+                weights = ipw)
+
+model_staff_direct_caring <- clm(rating ~ form + category + region + during_covid + utility + staff_level,
+                data = filter(cqc_skills, domain == "Caring"),
+                link = "logit",
+                weights = ipw)
+
+model_staff_direct_well_led <- clm(rating ~ form + category + region + during_covid + utility + staff_level,
+                data = filter(cqc_skills, domain == "Well-led"),
+                link = "logit",
+                weights = ipw)
+
+model_staff_direct_responsive <- clm(rating ~ form + category + region + during_covid + utility + staff_level,
+                data = filter(cqc_skills, domain == "Responsive"),
+                link = "logit",
+                weights = ipw)
+```
+
+
+
+
+```{r}
+staff_direct_models <- modelsummary(list("overall" = model_staff_direct_overall, "safe" = model_staff_direct_safe, 
+                                    "effective" = model_staff_direct_effective, "caring"= model_staff_direct_caring, 
+                                    "well-led" = model_staff_direct_well_led, "responsive" = model_staff_direct_responsive),
+                               coef_omit = "region", exponentiate = F,
+                               statistic = "({p.value}) {stars}")
+staff_direct_models
+```
+
+
+
+
+
+## Modeling on turnover
+
+```{r}
+model_turnover_overall <- lm(turnover ~ form + category + region + during_covid + utility,
+                data = filter(cqc_skills, domain == "Overall"),
+                weights = ipw)
+
+model_turnover_safe <- lm(turnover ~ form + category + region + during_covid + utility,
+                data = filter(cqc_skills, domain == "Safe"),
+                weights = ipw)
+
+model_turnover_effective <- lm(turnover ~ form + category + region + during_covid + utility,
+                data = filter(cqc_skills, domain == "Effective"),
+                weights = ipw)
+
+model_turnover_caring <- lm(turnover ~ form + category + region + during_covid + utility,
+                data = filter(cqc_skills, domain == "Caring"),
+                weights = ipw)
+
+model_turnover_well_led <- lm(turnover ~ form + category + region + during_covid + utility,
+                data = filter(cqc_skills, domain == "Well-led"),
+                weights = ipw)
+
+model_turnover_responsive <- lm(turnover ~ form + category + region + during_covid + utility,
+                data = filter(cqc_skills, domain == "Responsive"),
+                weights = ipw)
+```
+
+
+```{r}
+turnover_models <- modelsummary(list("overall" = model_turnover_overall, "safe" = model_turnover_safe, 
+                                    "effective" = model_turnover_effective, "caring"= model_turnover_caring, 
+                                    "well-led" = model_turnover_well_led, "responsive" = model_turnover_responsive),
+                               coef_omit = "region", exponentiate = F,
+                               statistic = "({p.value}) {stars}")
+turnover_models
+```
+
+## Modeling on turnover rate direct effects
+
+```{r }
+model_turnover_direct_overall <- clm(rating ~ form + category + region + during_covid + utility + turnover,
+                data = filter(cqc_skills, domain == "Overall"),
+                link = "logit",
+                weights = ipw)
+
+model_turnover_direct_safe <- clm(rating ~ form + category + region + during_covid + utility + turnover,
+                data = filter(cqc_skills, domain == "Safe"),
+                link = "logit",
+                weights = ipw)
+
+model_turnover_direct_effective <- clm(rating ~ form + category + region + during_covid + utility + turnover,
+                data = filter(cqc_skills, domain == "Effective"),
+                link = "logit",
+                weights = ipw)
+
+model_turnover_direct_caring <- clm(rating ~ form + category + region + during_covid + utility + turnover,
+                data = filter(cqc_skills, domain == "Caring"),
+                link = "logit",
+                weights = ipw)
+
+model_turnover_direct_well_led <- clm(rating ~ form + category + region + during_covid + utility + turnover,
+                data = filter(cqc_skills, domain == "Well-led"),
+                link = "logit",
+                weights = ipw)
+
+model_turnover_direct_responsive <- clm(rating ~ form + category + region + during_covid + utility + turnover,
+                data = filter(cqc_skills, domain == "Responsive"),
+                link = "logit",
+                weights = ipw)
+```
+
+
+
+
+```{r}
+turnover_direct_models <- modelsummary(list("overall" = model_turnover_direct_overall, "safe" = model_turnover_direct_safe, 
+                                    "effective" = model_turnover_direct_effective, "caring"= model_turnover_direct_caring, 
+                                    "well-led" = model_turnover_direct_well_led, "responsive" = model_turnover_direct_responsive),
+                               coef_omit = "region", exponentiate = F,
+                               statistic = "({p.value}) {stars}")
+turnover_direct_models
+
+```
+
+
+
+
+
+
+

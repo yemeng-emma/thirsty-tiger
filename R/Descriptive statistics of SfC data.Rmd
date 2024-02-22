@@ -1,0 +1,126 @@
+---
+title: "Addtional Analysis with SfC and CQC data"
+author: "Meng Ye"
+date: "2/19/2023"
+output:
+  html_document: default
+  pdf_document: default
+  word_document: default
+---
+
+```{r contr}
+# environment setup to run ordered logit properly
+options(contrasts = rep("contr.treatment", 2))
+```
+
+
+This chunk loads all the packages to use
+
+```{r load package, message=FALSE, warning=FALSE}
+#packages for ordered logit
+library(tidyverse) # package for data cleaning and plotting
+library(readxl) # package for reading excel file
+library(broom) # extracting model summary as data frame
+library(modelsummary) # deriving model tables
+library(scales) # label percent
+library(lubridate) # working with dates
+library(marginaleffects) #to calculate marginal effects
+
+library(ordinal) # package for ordinal logit regression
+
+```
+
+
+
+## Data Preparation
+
+First, import the sampled and coded data set
+
+```{r import data, message=FALSE, warning=FALSE}
+#import the raw data file
+socialcare_sk <- read_csv("data/cqc_sfc_cleaned.csv")
+```
+
+
+```{r}
+socialcare <- socialcare_sk %>% 
+# recode legal form types to be more readable / easier to present
+  mutate(inherited = ifelse(inherited == "Y", TRUE, FALSE),
+         rating = recode(rating, 
+                         "Insufficient evidence to rate" = "NA",
+                         "Requires improvement" = "Req improv")) %>% 
+  # set the order of the values in the factors 
+  mutate(form = ordered(form, levels = c("FPO", "NPO", "GOV", "CIC", "IND")),
+         
+  # assume the order of the ratings as follows but need to double check with the source 
+         rating = ordered(rating, levels = c("Inadequate","Req improv", "Good", "Outstanding"))) %>%
+  
+  # adding the rating data coded as numerical
+  mutate(rating_num = case_when(rating == "Inadequate" ~ 1,
+                                rating == "Req improv" ~ 2,
+                                rating == "Good" ~ 3,
+                                rating == "Outstanding" ~ 4)) %>% 
+  
+  mutate(category = case_when(primary_cat == "Community based adult social care services" ~ "community",
+                              primary_cat == "Residential social care" ~ "residential",
+                              TRUE ~ as.character(NA)),
+
+         # deriving year column and dummy variable for before_covid
+         year = year(publication_date),
+         after_covid = ifelse(year >= 2020, TRUE, FALSE),
+         before_covid = ifelse(year <= 2019, TRUE, FALSE)) %>%
+
+  # converting the ordinal variable to numerical 
+  mutate(rating_num = case_when(rating == "Inadequate" ~ 1,
+                                rating == "Req improv" ~ 2,
+                                rating == "Good" ~ 3,
+                                rating == "Outstanding" ~ 4)) %>% 
+  # derive the rating dummy
+  mutate(rating_higher = ifelse(rating_num > 2, 1, 0))
+```
+
+
+## Discriptive statstics 
+
+Mean and Standard Deviation for numerical variables
+
+```{r}
+table1 <- datasummary((turnover + staff_level 
+                       + totalstaff + age) * (Mean + SD) ~ (form + 1),
+            data = socialcare, fmt = 1)
+table1
+```
+
+
+
+
+```{r}
+table2 <- datasummary(service_type_selected ~ (form + 1),
+            data = socialcare, fmt = 0)
+table2
+```
+
+
+
+```{r}
+table4 <- datasummary(size_type ~ (form + 1),
+            data = socialcare, fmt = 0)
+table4
+```
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

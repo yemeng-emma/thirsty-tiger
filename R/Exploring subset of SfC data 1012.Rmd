@@ -1,0 +1,460 @@
+---
+title: "Data Cleaning for Skills for Care Data"
+author: "Meng Ye"
+date: "11/2/2022"
+output:
+  html_document: default
+  pdf_document: default
+  word_document: default
+---
+
+Updated 2/19/2023 to add new variable `age` and save the combined data to prepare for further analysis
+
+
+### Setting up
+```{r load package, message=FALSE, warning=FALSE}
+library(tidyverse) # package for data cleaning and plotting
+library(readxl) # package for reading excel file
+library(broom) # extracting model summary as data frame
+library(modelsummary) # deriving model tables
+library(scales) # label percent
+library(lubridate) # working with dates
+```
+
+```{r contr}
+# environment setup to run ordered logit properly
+options(contrasts = rep("contr.treatment", 2))
+```
+
+## Import data 
+
+```{r import data, message=FALSE, warning=FALSE}
+#import the raw data file
+cqc_skills <- read_excel("data/SfC_CQC.xlsx")
+skills_raw <- read_csv("data/Skills_raw.csv")
+```
+
+
+## Data Cleaning for CQC_skills (cqc data with SfC establishmentid)
+
+```{r}
+#select the CQC data that has Skills for Care establishment id
+CQC_sub <- cqc_skills %>% 
+  filter(!is.na(establishmentid)) %>% 
+#restructure to wide data (1 row for each establishment id)
+  pivot_wider(names_from = domain, values_from = rating) %>% 
+  mutate(form = ifelse(form == "NA", NA, form))
+
+head(CQC_sub)
+```
+
+```{r}
+CQC_sub %>% 
+  summarize(all_rows = n(),
+            unique_rows = n_distinct(establishmentid))
+```
+
+This results show that some facilities have more than 1 historical rating records. 
+
+
+## Data Cleaning for Skills for Care data
+### Select Columns 
+
+```{r}
+#write variable name list
+columns <- c("ParentSubSingle", "isparent", "estabcreateddate",  #basic info
+             "Starters_Leavers_FILTER", "totalstarters", "totalleavers", #staff
+             "totalstaff", "totalvacancies","ORGWRKS", "ORGWRKSGP", #staff
+             "esttype",  "mainstid", "MAINSERGP1") #service descriptions
+             
+```
+
+Notes for some variables:
+
+`ParentSubSingle`: values: 0, 1, 2. Does not say which is parent/sub/single. It is observed 2 corresponds to `isparent = 1", so should be parent. 
+
+
+`Starters_Leavers_FILTER`: Flag to define if a workplace has reliable starters or leavers information.
+1 = Include, 0 = Exclude. 
+
+`ORGWRKS`: Sum of totalstaff **across** the organisation.
+
+`ORGWRKSGP`: Grouping of ORGWRKS
+
+  Value	 Label
+  -1	   Not allocated
+  991	   Micro (1 to 9)
+  992	   Small (10 to 49)
+  993	   Medium (50 to 249)
+  994	   Large (250 or more)
+
+`esttype`: sector of the workplace
+
+`mainstid`: The main service provided by the workplace
+
+`totalstarters` and `totalleavers`: Total number of permanent and temporary staff that started/left in the previous 12 months.
+
+
+```{r select columns}
+skills_selected <- skills_raw %>% 
+  select(establishmentid, all_of(columns), starts_with("jr28"), starts_with("jr29"),
+         matches("^st.*cap$"), matches("^st.*util$"))
+```
+
+
+- "jr" codes
+
+Code	Label
+
+28	**Any job role**. This is the sum of all job roles submitted by the establishment.
+
+29	**Any direct care role**. This is the sum of all direct care roles submitted by the establishment. (Note: this variable may be more directly related to service quality)
+
+30	Any manager/supervisor role. This is the sum of all manager/supervisor roles submitted by the establishment.
+
+31	Any regulated profession role. This is the sum of all regulated profession roles submitted by the establishment.
+
+32	Any other roles. This is the sum of all other roles, those not included in groups 29,30 and 31, submitted by the establishment.
+
+1	Senior Management
+
+2	Middle Management
+
+3	First Line Manager
+
+4	Registered Manager
+
+5	Supervisor
+
+6	Social Worker
+
+7	Senior Care Worker
+
+8	Care Worker
+
+9	Community Support and Outreach Work
+
+10	Employment Support
+
+11	Advice Guidance and Advocacy
+
+15	Occupational Therapist
+
+16	Registered Nurse
+
+17	Allied Health Professional
+
+22	Technician
+
+23	Other care-providing job role
+
+24	Managers and staff in care-related but not care-providing roles
+
+25	Administrative or office staff not care-providing
+
+26	Ancillary staff not care-providing
+
+27	Other non-care-providing job roles
+
+34	Activities worker or co-ordinator
+
+35	Safeguarding and reviewing officer
+
+36	Occupational therapist assistant
+
+37	Nursing Associate
+
+38	Nursing Assistant
+
+39	Assessment officer
+
+40	Care co-ordinator
+
+41	Care navigator
+
+42	Any Childrens/young peoples job role
+
+- "capacity vs. utility" meaning
+
+![capacity meaning](data/capacity.png)
+
+
+## Exploring the strucutre of Skills for Care data
+
+Use this small dataset to check if each establishment ID has multiple rows
+
+```{r}
+skills_raw %>% 
+  select(establishmentid) %>% 
+  summarise(count = n(),
+            count_unqice = n_distinct(establishmentid))
+
+```
+
+In the Skills for Care data set, each `establishmentid` only corresponds to 1 row data.
+
+
+## Merge data and derive new variables
+
+### coding section (jump to the next section for rationale)
+
+```{r}
+# merge and recode data
+merged_wide <- CQC_sub %>% 
+  left_join(skills_selected, by = "establishmentid") %>% 
+  mutate(main_service_type = factor(mainstid),
+         main_group1 = factor(MAINSERGP1),
+         
+         main_service_group = case_when(
+           main_group1 == "1" ~ "Adult residential",
+           main_group1 == "3" ~ "Adult domicilary", 
+           TRUE ~ as.character(NA)),
+         
+# derive truncated service types (where CICs exist) see table 1
+         service_type_selected = case_when(
+           main_service_type == "1"  ~ "care home w/ nursing",
+           main_service_type == "2"  ~ "care home w/o nursing",
+           main_service_type == "8"  ~ "Domicilary Care",
+           main_service_type == "55" ~ "Supported Living",
+           # dropped 61 -- community based for learning disability
+           TRUE ~ as.character(NA)),
+
+# recode size type to be more readable
+         size_type = case_when(
+           ORGWRKSGP == -1  ~ as.character(NA),
+           ORGWRKSGP == 991 ~ "micro",
+           ORGWRKSGP == 992 ~ "small",
+           ORGWRKSGP == 993 ~ "medium",
+           ORGWRKSGP == 994 ~ "large",
+           TRUE ~ as.character(NA)),
+# derive age of the organization
+        start_date = dmy(estabcreateddate),
+        age = 2023-year(start_date)
+)
+
+```
+
+
+
+
+### Initial exploration with tabulation 
+
+Tabulation of service types by legal forms 
+
+```{r}
+#the distribution of service by by forms, we can only keep the types that have CIC providers?
+table1 <- datasummary(main_service_type ~ form,
+            data = merged_wide, fmt = 0)
+table1
+```
+Tabulation of total staff (mean and sd) by form and size type
+
+
+
+```{r}
+cross_table <- datasummary(main_service_group * service_type_selected ~ form,
+            data = merged_wide, fmt = 0)
+cross_table
+```
+Check the distribution of service types over service group
+
+
+
+
+```{r}
+table2 <- datasummary(totalstaff*form*(Mean + SD) ~ size_type,
+            data = merged_wide, fmt = 0)
+table2
+```
+
+
+
+## Derive new variables 
+
+
+- About turnover rate
+
+
+`Employee turnover` rate is the percent of employees who leave a company within a specific time period. Turnover rate is commonly calculated by month, quarter, or year and includes both voluntary and involuntary losses. Monthly and quarterly turnover rates are commonly expressed as averages, while annual turnover rate is usually cumulative.
+
+
+$$
+\text{Employee turnover rate} = \frac{\text{Number of employees who left}}{\text{Average number of employees}} \times 100
+$$
+
+
+
+$$
+\text{Average number of employees} = \frac{\text{(Headcount at the begining of the timeframe + headcount at the end of the timeframe)}}{2}
+$$
+
+Strictly speaking, we do not have the exact begin/end staff number for the n_left employees in the last year
+
+### New variables could be derived 
+
+count of employees left in last 12 month/latest total staff
+by service type, total staff/
+number of vacancy - not useful due to a lot of missing value
+
+Any other ideas? Please specify **exact** variable rather than vague concept 
+
+```{r derive new variables}
+# derive new variables
+merged_recoded_wide <- merged_wide %>% 
+# mutate NA only for jr28flag = 1 and jr29 = 1, respectively
+  mutate(across(starts_with("jr28"), 
+          ~ ifelse(jr28flag == 1, ifelse(is.na(.x), 0, .x), .x))) %>% 
+  mutate(across(starts_with("jr29"), 
+          ~ ifelse(jr29flag == 1, ifelse(is.na(.x), 0, .x), .x))) %>% 
+  mutate(across(starts_with("st"),
+         ~ ifelse(is.na(.x), 0, .x))) %>% 
+  mutate(totalstaff = ifelse(is.na(totalstaff), 0, totalstaff),
+         turnover = totalleavers/totalstaff*100,
+         turnover = ifelse(turnover < 0, NA, turnover),
+         turnover = ifelse(is.na(turnover) | turnover == Inf, NA, turnover)) %>% 
+  rowwise() %>% 
+  mutate(capacity = sum(across(matches("^st.*cap$"))),
+         utility = sum(across(matches("^st.*util$")))) %>% 
+  ungroup() %>% 
+  mutate(staff_level = totalstaff/utility*100,
+         staff_level = ifelse(staff_level == Inf, NA, staff_level))
+  
+```
+
+For now, haven't accounted for the vacancies. Because there seems to be quite some missing values. Need to check in more detail later. 
+
+```{r}
+table3 <- datasummary(staff_level * main_service_group *(Mean + SD) ~ form,
+            data = merged_recoded_wide, fmt = 1, na.rm = T)
+table3
+```
+
+```{r}
+table_staff <- datasummary(totalstaff * (Mean+Median)  ~ form,
+            data = filter(merged_recoded_wide, !is.na(main_service_group)), fmt = 1, na.rm = T, output = "staff2.docx")
+table_staff
+```
+
+
+```{r}
+ggplot(filter(merged_recoded_wide, !is.na(main_service_group)), 
+       aes(x = form, y = totalstaff)) +
+  geom_boxplot() +
+  coord_cartesian(ylim =c(0, 500)) +
+  facet_wrap(vars(main_service_group))
+```
+
+
+```{r}
+table4 <- datasummary(turnover * service_type_selected *(Mean + SD)~ form,
+            data = merged_recoded_wide, fmt = 1, na.rm = T)
+table4
+```
+
+## Run Toy Models
+
+Prepare data for analysis
+
+```{r}
+#pivot longer back
+merged_long <- merged_recoded_wide %>% 
+  pivot_longer(cols = c(Safe, Effective, Caring, Responsive, `Well-led`, Overall),
+               names_to = "domain", values_to = "rating")
+```
+
+
+```{r}
+#select relevant columns, rename and relabel 
+merged_long <- merged_long %>% 
+# recode legal form types to be more readable / easier to present
+  mutate(inherited = ifelse(inherited == "Y", TRUE, FALSE),
+         rating = recode(rating, 
+                         "Insufficient evidence to rate" = "NA",
+                         "Requires improvement" = "Req improv")) %>% 
+  # set the order of the values in the factors 
+  mutate(form = ordered(form, levels = c("FPO", "NPO", "GOV", "CIC", "IND")),
+         
+  # assume the order of the ratings as follows but need to double check with the source 
+         rating = ordered(rating, levels = c("Inadequate","Req improv", "Good", "Outstanding"))) %>%
+  
+  # adding the rating data coded as numerical
+  mutate(rating_num = case_when(rating == "Inadequate" ~ 1,
+                                rating == "Req improv" ~ 2,
+                                rating == "Good" ~ 3,
+                                rating == "Outstanding" ~ 4)) %>% 
+  
+  mutate(category = case_when(primary_cat == "Community based adult social care services" ~ "community",
+                              primary_cat == "Residential social care" ~ "residential",
+                              TRUE ~ as.character(NA)),
+
+         # deriving year column and dummy variable for before_covid
+         year = year(publication_date),
+         after_covid = ifelse(year >= 2020, TRUE, FALSE),
+         before_covid = ifelse(year <= 2019, TRUE, FALSE)) %>%
+
+  # converting the ordinal variable to numerical 
+  mutate(rating_num = case_when(rating == "Inadequate" ~ 1,
+                                rating == "Req improv" ~ 2,
+                                rating == "Good" ~ 3,
+                                rating == "Outstanding" ~ 4)) %>% 
+  # derive the rating dummy
+  mutate(rating_higher = ifelse(rating_num > 2, 1, 0))
+
+# show first several rows of the data set derived 
+head(merged_long)
+```
+
+
+### Save data
+
+```{r save data}
+write.csv(merged_long, file = "data/cqc_sfc_cleaned.csv")  
+```
+
+
+### Run simple models
+
+- simple regression with SfC data
+
+```{r}
+model_staff<- lm(staff_level ~ form + main_service_group,
+                 data = merged_long)
+
+model_staff_simple <- lm(staff_level ~ form,
+                 data = merged_long)
+
+model_turnover <- lm(turnover ~ form + main_service_group,
+                 data = merged_long)
+
+model_turnover_simple <- lm(turnover ~ form,
+                 data = merged_long)
+```
+
+```{r}
+modelsummary(list("model staff" = model_staff, "model staff simple" = model_staff_simple, 
+                  "model turnover" = model_turnover, "model turnover simple" = model_turnover_simple),
+             statistic = "({p.value}) {stars}", fmt = 2)
+```
+
+
+- Use domain as random effects? Please ignore for the moment
+
+```{r message=FALSE, warning=FALSE}
+library(lme4)
+```
+
+
+```{r}
+# random effects with domains
+re_model <- lmer(rating_num ~ form + (form | domain) + after_covid + 
+                   category + region + inherited,
+                 data = merged_long)
+re_model
+```
+Just tested out using domain as random effects to incorporate different rating domains in one model, but seems the results are much harder to communicate.
+
+
+
+
+
+
