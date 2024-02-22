@@ -1,5 +1,5 @@
-# thirsty-tiger
-Research project for the CQC rating with Skill for care staffing in UK social and health care 
+# Research project for sector affiliation, staffing conditions and quality rating in UK social and health care 
+The "Skills for Care" quantitative paper
 
 ### Note on the "Thirsty tiger" project name
 
