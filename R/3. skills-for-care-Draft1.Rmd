@@ -1,7 +1,7 @@
 ---
 title: "Skills-for-care analysis ARNOVA 2023"
 author: "Meng Ye"
-date: "2023-11-03"
+date: "2024-03-01"
 output:
   word_document: default
   html_document: default
@@ -36,39 +36,10 @@ First, import the sampled and coded data set
 
 ```{r import data, message=FALSE, warning=FALSE}
 #import the raw data file
-cqc_skills <- read_csv(here("data","cleaned_sfc_ipw.csv")) %>% 
-  mutate(form = fct_relevel(form, "FPO"),
-         rating = factor(rating),
-         Year = factor(year),
-         during_covid = after_covid,
-         staff_level = staff_level/100) %>% 
-  mutate(rating = ordered(rating, levels = c("Inadequate","Req improv", "Good", "Outstanding"))) %>% 
-     filter(form!="NA" & rating!="NA") 
+cqc_skills <- read_rds(here("data","cleaned_sfc_ipw.rds")) 
 
 ```
 
-
-
-
-
-## Detailes about new variables 
-
-
-- About turnover rate
-
-
-`Employee turnover` rate is the percent of employees who leave a company within a specific time period. Turnover rate is commonly calculated by month, quarter, or year and includes both voluntary and involuntary losses.
-
-
-$$
-\text{Employee turnover rate} = \frac{\text{Number of employees who left}}{\text{Average number of employees}} \times 100
-$$
-
-
-
-$$
-\text{Average number of employees} = \frac{\text{(Headcount at the begining of the timeframe + headcount at the end of the timeframe)}}{2}
-$$
 
 
 

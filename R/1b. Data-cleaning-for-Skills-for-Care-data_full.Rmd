@@ -1,14 +1,14 @@
 ---
 title: "Data Cleaning for Skills for Care Data"
 author: "Meng Ye"
-date: "2/22/2024"
+date: "3/14/2024"
 output:
   html_document: default
   pdf_document: default
   word_document: default
 ---
-
-Updated 2/19/2023 to add new variable `age` and save the combined data to prepare for further analysis
+uPDATED 3/14/2024, use more accurate skills for care variables for analysis
+Updated 3/8/2024 to add new variable `age` and save the combined data to prepare for further analysis
 
 
 ### Setting up
@@ -19,6 +19,7 @@ library(broom) # extracting model summary as data frame
 library(modelsummary) # deriving model tables
 library(scales) # label percent
 library(lubridate) # working with dates
+library(here) # managing paths
 ```
 
 ```{r contr}
@@ -30,12 +31,12 @@ options(contrasts = rep("contr.treatment", 2))
 
 ```{r import data, message=FALSE, warning=FALSE}
 #import the raw data file
-cqc_skills <- read_excel("data/SfC_CQC.xlsx") # CQC data with bridging column of SfC establishment id curated by Skills for Care
-skills_raw <- read_csv("data/Skills_raw.csv") # raw Skills for Care organizational data
+cqc_skills <- read_excel(here("data","SfC_CQC.xlsx")) # CQC data with bridging column of SfC establishment id curated by Skills for Care
+skills_raw <- read_csv(here("data","Skills_raw.csv")) # raw Skills for Care organizational data
 ```
 
 
-## Data Cleaning for CQC_skills (cqc data with SfC establishmentid)
+## Pivo for CQC_skills (cqc data with SfC establishmentid)
 
 ```{r}
 #select the CQC data that has Skills for Care establishment id
@@ -54,7 +55,7 @@ CQC_sub %>%
             unique_rows = n_distinct(establishmentid))
 ```
 
-This results show that some facilities have more than 1 rating records. In detail the 
+This results show that some facilities have more than 1 rating group. After inspecting the raw CQC data, it turned out multiple sets of ratings for the same location are for different service groups.  
 
 
 ## Data Cleaning for Skills for Care data
@@ -64,7 +65,7 @@ This results show that some facilities have more than 1 rating records. In detai
 #write variable name list
 columns <- c("ParentSubSingle", "isparent", "estabcreateddate",  #basic info
              "Starters_Leavers_FILTER", "totalstarters", "totalleavers", #staff
-             "totalstaff", "totalvacancies","ORGWRKS", "ORGWRKSGP", #staff
+             "totalstaff", "totalvacancies","ORGWRKS", "ORGWRKSGP","ESTABWRKS", #staff
              "esttype",  "mainstid", "MAINSERGP1", "MAINSERGP2") #service descriptions
              
 ```
@@ -174,14 +175,6 @@ Code	Label
 
 42	Any Childrens/young peoples job role
 
-- "capacity vs. utility" meaning
-
-![capacity meaning](data/capacity.png)
-
-- Main groups and corresponding values 
-
-![main groups values](data/maingroups.png)
-
 
 
 ## Exploring the strucutre of Skills for Care data
@@ -201,7 +194,7 @@ In the Skills for Care data set, each `establishmentid` only corresponds to 1 ro
 
 ## Merge data and derive new variables
 
-### coding section (jump to the next section for rationale)
+### coding section
 
 ```{r}
 # merge and recode data
@@ -235,20 +228,50 @@ merged_wide <- CQC_sub %>%
            TRUE ~ as.character(NA)),
 # derive age of the organization
         start_date = dmy(estabcreateddate),
-        age = 2023-year(start_date)
-)
+        age = 2024-year(start_date)
+) %>% 
+  mutate(total_leavers = ifelse(totalleavers < 0, NA, totalleavers),
+         total_starters = ifelse(totalleavers < 0, NA, totalstarters))
+# recode -1 or -2 to NA for totallevers and totalstarters
 
 ```
 
 
 
+```{r}
+## check the distribution of the data by service type selected
+merged_wide %>% 
+  group_by(service_type_selected) %>% 
+  summarise(count = n())
+```
+
+```{r}
+# checking how much missing values for total starters
+merged_wide %>% 
+  group_by(!is.na(total_starters)) %>% 
+  summarize(count = n())
+```
+
+```{r}
+# checking how much missing values for total leavers
+merged_wide %>% 
+  group_by(!is.na(total_leavers)) %>% 
+  summarize(count = n())
+```
+
+```{r}
+# checking how much missing values for "jr29"
+merged_wide %>% 
+  group_by(ifelse(jr29flag == 1, TRUE, FALSE)) %>% 
+  summarize(count = n())
+```
 
 ### Initial exploration with tabulation 
 
 Tabulation of service types by legal forms 
 
 ```{r}
-#the distribution of service by by forms, we can only keep the types that have CIC providers?
+#the distribution of service by by forms
 table1 <- datasummary(main_service_type ~ form,
             data = merged_wide, fmt = 0)
 table1
@@ -339,7 +362,7 @@ merged_recoded_wide <- merged_wide %>%
   mutate(capacity = sum(across(matches("^st.*cap$"))),
          utility = sum(across(matches("^st.*util$")))) %>% 
   ungroup() %>% 
-  mutate(staff_level = totalstaff/utility*100,
+  mutate(staff_level = totalstaff/utility,
          staff_level = ifelse(staff_level == Inf, NA, staff_level))
   
 ```
@@ -347,6 +370,12 @@ merged_recoded_wide <- merged_wide %>%
 For now, haven't accounted for the vacancies. Because there seems to be quite some missing values. Need to check in more detail later. 
 
 
+```{r}
+merged_recoded_wide |>
+  summarise(row_counts = n(),
+            jr29 = sum(jr29flag),
+            jr29_ratio = mean(jr29flag))
+```
 
 
 
@@ -435,7 +464,7 @@ table3
 ### Save data
 
 ```{r save data}
-write.csv(merged_long_ordered, file = "data/cqc_sfc_cleaned.csv")  
+write_rds(merged_long_ordered, file = here("data","cqc_sfc_cleaned.rds"))  
 ```
 
 
