@@ -236,7 +236,7 @@ merged_wide <- CQC_sub %>%
 
 ```
 
-
+Check distribution of the data and potential variables 
 
 ```{r}
 ## check the distribution of the data by service type selected
@@ -266,59 +266,13 @@ merged_wide %>%
   summarize(count = n())
 ```
 
-### Initial exploration with tabulation 
-
-Tabulation of service types by legal forms 
-
-```{r}
-#the distribution of service by by forms
-table1 <- datasummary(main_service_type ~ form,
-            data = merged_wide, fmt = 0)
-table1
-```
-
-Tabulation of total 
-
-```{r}
-table_main_group1 <- datasummary(main_group1 ~ form,
-            data = merged_wide, fmt = 0)
-table_main_group1
-```
-
-
-```{r}
-table_main_group2 <- datasummary(main_group2 ~ form,
-            data = merged_wide, fmt = 0)
-table_main_group2
-```
-
-
-Tabulation of total staff (mean and sd) by form and size type
-
-
-
-```{r}
-cross_table <- datasummary(main_service_group * service_type_selected ~ form,
-            data = merged_wide, fmt = 0)
-cross_table
-```
-Check the distribution of service types over service group
-
-
-
-
-```{r}
-table2 <- datasummary(totalstaff*form*(Mean + SD) ~ size_type,
-            data = merged_wide, fmt = 0)
-table2
-```
 
 
 
 ## Derive new variables 
 
 
-- About turnover rate
+- About the **new** turnover rate
 
 
 `Employee turnover` rate is the percent of employees who leave a company within a specific time period. Turnover rate is commonly calculated by month, quarter, or year and includes both voluntary and involuntary losses. Monthly and quarterly turnover rates are commonly expressed as averages, while annual turnover rate is usually cumulative.
@@ -331,10 +285,11 @@ $$
 
 
 $$
-\text{Average number of employees} = \frac{\text{(Headcount at the begining of the timeframe + headcount at the end of the timeframe)}}{2}
+\text{Average number of employees} = \frac{\text{(Headcount at the beginning of the timeframe + headcount at the end of the timeframe)}}{2} \\
+\phantom{\text{Average number of employees}} = \frac{\text{(headcount at the end of the timeframe + total leavers - total starters + headcount at the end of the timeframe)}}{2}\\
+\phantom{\text{Average number of employees}} = \text{(headcount at the end of the timeframe} + \frac{\text{(total leavers - total starters )}}{2}
 $$
 
-Strictly speaking, we do not have the exact begin/end staff number for the n_left employees in the last year
 
 ### New variables could be derived 
 
@@ -354,28 +309,35 @@ merged_recoded_wide <- merged_wide %>%
           ~ ifelse(jr29flag == 1, ifelse(is.na(.x), 0, .x), .x))) %>% 
   mutate(across(starts_with("st"),
          ~ ifelse(is.na(.x), 0, .x))) %>% 
+  
+  # calculating the old turnover rate, renamed to "turnover1"
+
   mutate(totalstaff = ifelse(is.na(totalstaff), 0, totalstaff),
-         turnover = totalleavers/totalstaff*100,
+         turnover0 = totalleavers/totalstaff * 100,
+         turnover0 = ifelse(turnover0 < 0, NA, turnover0),
+         turnover0 = ifelse(is.na(turnover0) | turnover0 == Inf, NA, turnover0)) %>% 
+  
+  # derive the average totalstaff count for the between T-12month and T0
+  # and calculate the turnover rate with average total staff
+
+  mutate(average_totalstaff = totalstaff - total_starters + total_leavers)  %>% 
+  mutate(average_totalstaff = ifelse(is.na(average_totalstaff), 0, average_totalstaff),
+         turnover = totalleavers/average_totalstaff * 100,
          turnover = ifelse(turnover < 0, NA, turnover),
          turnover = ifelse(is.na(turnover) | turnover == Inf, NA, turnover)) %>% 
   rowwise() %>% 
   mutate(capacity = sum(across(matches("^st.*cap$"))),
          utility = sum(across(matches("^st.*util$")))) %>% 
   ungroup() %>% 
-  mutate(staff_level = totalstaff/utility,
+  mutate(staff_level0 = totalstaff/utility,
+         staff_level0 = ifelse(staff_level0 == Inf, NA, staff_level0)) %>% 
+  mutate(direct_staff = jr29work,
+         staff_level = direct_staff/utility,
          staff_level = ifelse(staff_level == Inf, NA, staff_level))
   
 ```
 
-For now, haven't accounted for the vacancies. Because there seems to be quite some missing values. Need to check in more detail later. 
 
-
-```{r}
-merged_recoded_wide |>
-  summarise(row_counts = n(),
-            jr29 = sum(jr29flag),
-            jr29_ratio = mean(jr29flag))
-```
 
 
 

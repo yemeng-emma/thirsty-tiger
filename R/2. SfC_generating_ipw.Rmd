@@ -160,49 +160,39 @@ cleaned_sfc_ipw <- cleaned_cqc_skills %>%
 ### build a data frame to derive the tables
 
 ```{r}
-ipw_for_graphing <- cqc_overall %>% 
+compare_data <- cqc %>% 
+            left_join(ipw_data, by = "establishmentid") %>% 
             mutate(SfC = ifelse(select_in == 1, TRUE, FALSE),
                    weighted_rating_num = rating_num * ipw) %>% 
-   filter(form!="NA" & rating!="NA")
+   filter(!is.na(form)& !is.na(rating))
 ```
-
-
-
-```{r}
-datasummary(form * (1 + rating + rating_num + weighted_rating_num) ~ (1 + SfC ) *(1 + Mean),
-            data = ipw_for_graphing,
-            fmt = 2)
-```
-
 
 
 ```{r message=FALSE, warning=FALSE}
-sfc_count <- ipw_for_graphing %>%
+sfc_count <- compare_data %>%
   filter(select_in == TRUE) %>% 
   group_by(form, rating) %>%
   summarize(SfC = n(),
-            SfC_weighted = sum(ipw, na.rm = TRUE),
-            SfC_weighted_short = sum(ipw_short, na.rm = TRUE)) %>% 
+            SfC_weighted = sum(ipw, na.rm = TRUE)) %>% 
   ungroup() %>% 
-    filter(form!="NA")
+  filter(form !="NA")
+
 sfc_count
 ```
 
-
 ```{r}
-cqc_count <- ipw_for_graphing %>%
+cqc_count <- compare_data %>%
   group_by(form, rating) %>%
   summarize(CQC = n()) %>% 
   left_join(sfc_count, by = c("form", "rating")) %>% 
   ungroup() %>% 
   filter(form!="NA") %>%
-  mutate(ratio = SfC/CQC) %>% 
-  ungroup()
+  mutate(ratio = SfC/CQC) 
 cqc_count
 ```
 
 ```{r}
-sfc_joint <- ipw_for_graphing %>%
+sfc_joint <- compare_data %>%
   filter(select_in == TRUE) %>% 
   group_by(form) %>%
   summarize(SfC = n(),
@@ -210,36 +200,32 @@ sfc_joint <- ipw_for_graphing %>%
 ```
 
 ```{r}
-cqc_joint <- ipw_for_graphing %>%
+cqc_subtotal <- compare_data %>%
   group_by(form) %>%
   summarize(CQC = n()) %>% 
   left_join(sfc_joint, by = "form") %>% 
   ungroup() %>% 
   filter(form!="NA") %>%
-  mutate(ratio = SfC/CQC)
-cqc_joint
+  mutate(ratio = SfC/CQC) %>% 
+  mutate(rating = "Sub-total")
+cqc_subtotal
 ```
-
-
-
-## Analysis with the sub-set with ipw
-
+### stack two data frames together
 
 ```{r}
-model_simple <- lm(rating_num ~ form + category + Year + region,
-                   data = filter(cleaned_sfc, domain == "Overall"),
-                   weights = ipw)
+compare_table <- bind_rows(cqc_count, cqc_subtotal) %>% 
+  mutate(rating = factor(rating, levels = c("Outstanding", "Good", "Req improv", "Inadequate", "Sub-total"), ordered = TRUE)) %>% 
+  arrange(form, rating) %>% 
+  mutate(ratio = scales::percent(ratio, scale = 100, accuracy = 0.1)) %>% 
+  mutate(SfC_weighted= scales::label_number(big.mark = ",", accuracy = 1)(SfC_weighted),
+         CQC= scales::label_number(big.mark = ",", accuracy = 1)(CQC),
+         SfC= scales::label_number(big.mark = ",",accuracy = 1)(SfC))
 
-tidy(model_simple)
+
+  
+
+compare_table
 ```
-
-```{r}
-model_cqc <- lm(rating_num ~ form + category + Year + region,
-                   data = filter(cqc, domain == "Overall"))
-
-tidy(model_cqc)
-```
-
 
 
 
