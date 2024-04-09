@@ -3,9 +3,9 @@ title: "Data Cleaning for Skills for Care Data"
 author: "Meng Ye"
 date: "3/14/2024"
 output:
-  html_document: default
-  pdf_document: default
   word_document: default
+  pdf_document: default
+  html_document: default
 ---
 Updated 3/14/2024, use more accurate skills for care variables for analysis
 
@@ -284,8 +284,9 @@ $$
 
 $$
 \text{Average number of employees} = \frac{\text{(Headcount at the beginning of the timeframe + headcount at the end of the timeframe)}}{2} \\
-\phantom{\text{Average number of employees}} = \frac{\text{(headcount at the end of the timeframe + total leavers - total starters + headcount at the end of the timeframe)}}{2}\\
-\phantom{\text{Average number of employees}} = \text{(headcount at the end of the timeframe} + \frac{\text{(total leavers - total starters )}}{2}
+\text{Average number of employees} = \frac{\text{(headcount at the end of the timeframe + total leavers - total starters + headcount at the beginning of the timeframe)}}{2}\\
+\text{Average number of employees} = \text{headcount at the end of the timeframe} + \frac{\text{(total leavers - total starters )}}{2}
+
 $$
 
 

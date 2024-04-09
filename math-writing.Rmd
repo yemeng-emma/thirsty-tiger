@@ -1,0 +1,22 @@
+---
+title: "Math-writing"
+author: "Meng Ye"
+date: "2024-04-09"
+output: word_document
+---
+
+
+
+$$
+\text{Staffing level} = \frac{\text{Total number of direct care employees}}{\text{Number of beds/places in use}} \times 100
+$$
+
+
+$$
+\text{Turnover rate} = \frac{\text{Number of employees who left in previous 12 months}}{\text{Average total number of employees in previous 12 months}} \times 100
+$$
+
+$$
+\text{Average total number of employees in previous 12 months} = (\text{employes at beggining + employees at the end})/2
+=(\text{employes at end + total leavers - total starters + employees at the end})/2
+$$
