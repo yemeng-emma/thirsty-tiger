@@ -7,9 +7,7 @@ output:
   pdf_document: default
   word_document: default
 ---
-uPDATED 3/14/2024, use more accurate skills for care variables for analysis
-Updated 3/8/2024 to add new variable `age` and save the combined data to prepare for further analysis
-
+Updated 3/14/2024, use more accurate skills for care variables for analysis
 
 ### Setting up
 ```{r load package, message=FALSE, warning=FALSE}
@@ -320,7 +318,7 @@ merged_recoded_wide <- merged_wide %>%
   # derive the average totalstaff count for the between T-12month and T0
   # and calculate the turnover rate with average total staff
 
-  mutate(average_totalstaff = totalstaff - total_starters + total_leavers)  %>% 
+  mutate(average_totalstaff = totalstaff + 1/2 * (total_leavers - total_starters))  %>% 
   mutate(average_totalstaff = ifelse(is.na(average_totalstaff), 0, average_totalstaff),
          turnover = totalleavers/average_totalstaff * 100,
          turnover = ifelse(turnover < 0, NA, turnover),
@@ -339,22 +337,6 @@ merged_recoded_wide <- merged_wide %>%
 
 
 
-
-
-```{r}
-table_staff <- datasummary(totalstaff * (Mean+Median)  ~ form,
-            data = filter(merged_recoded_wide, !is.na(main_service_group)), fmt = 1, na.rm = T, output = "staff2.docx")
-table_staff
-```
-
-
-```{r}
-ggplot(filter(merged_recoded_wide, !is.na(main_service_group)), 
-       aes(x = form, y = totalstaff)) +
-  geom_boxplot() +
-  coord_cartesian(ylim =c(0, 500)) +
-  facet_wrap(vars(main_service_group))
-```
 
 
 ```{r}
@@ -384,7 +366,7 @@ merged_long_ordered <- merged_long %>%
                          "Insufficient evidence to rate" = "NA",
                          "Requires improvement" = "Req improv")) %>% 
   # set the order of the values in the factors 
-  mutate(form = ordered(form, levels = c("FPO", "NPO", "GOV", "CIC", "IND")),
+  mutate(form = fct_relevel(form, "FPO"),
          
   # assume the order of the ratings as follows but need to double check with the source 
          rating = ordered(rating, levels = c("Inadequate","Req improv", "Good", "Outstanding"))) %>%
@@ -401,7 +383,7 @@ merged_long_ordered <- merged_long %>%
 
          # deriving year column and dummy variable for before_covid
          year = year(publication_date),
-         after_covid = ifelse(year >= 2020, TRUE, FALSE),
+         during_covid = ifelse(year >= 2020, TRUE, FALSE),
          before_covid = ifelse(year <= 2019, TRUE, FALSE)) %>%
 
   # converting the ordinal variable to numerical 
@@ -416,11 +398,6 @@ merged_long_ordered <- merged_long %>%
 head(merged_long_ordered)
 ```
 
-```{r}
-table3 <- datasummary(staff_level * main_service_group *(Mean + SD) ~ form,
-            data = merged_long_ordered, fmt = 1, na.rm = T)
-table3
-```
 
 
 ### Save data

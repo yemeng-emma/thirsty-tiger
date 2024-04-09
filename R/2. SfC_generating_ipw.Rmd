@@ -3,9 +3,9 @@ title: "Data Cleaning for Skills for Care Paper"
 author: "Meng Ye"
 date: "3/7/2024"
 output:
-  html_document: default
-  pdf_document: default
   word_document: default
+  pdf_document: default
+  html_document: default
 ---
 
 ## Read me
@@ -15,8 +15,8 @@ This is the data cleaning file for generating ipw for the CQC locations selectin
 1. Take the anonymized combined CQC-SfC data, generate a dummy variable based on whether SfC establishment_id is NA or not, `select_in` 
 2. Filter out the Overall rating rows and calculate the ipw at the location level
 3. Run the logit regression model of `select_in` and calculate the ipw
-4. Derive the sub-dataframe of and `establishment_id` and `ipw`
-5. Import the cleaned SfC from last year 
+4. Derive the sub-data frame of and `establishment_id` and `ipw`
+5. Import the cleaned SfC prepared in Step 1
 6. Merge the ipw data-frame to the cleaned SfC data
 
 
@@ -219,7 +219,8 @@ compare_table <- bind_rows(cqc_count, cqc_subtotal) %>%
   mutate(ratio = scales::percent(ratio, scale = 100, accuracy = 0.1)) %>% 
   mutate(SfC_weighted= scales::label_number(big.mark = ",", accuracy = 1)(SfC_weighted),
          CQC= scales::label_number(big.mark = ",", accuracy = 1)(CQC),
-         SfC= scales::label_number(big.mark = ",",accuracy = 1)(SfC))
+         SfC= scales::label_number(big.mark = ",",accuracy = 1)(SfC)) %>% 
+  gt()
 
 
   

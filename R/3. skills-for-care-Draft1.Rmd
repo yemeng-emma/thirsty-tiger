@@ -1,11 +1,13 @@
 ---
-title: "Skills-for-care analysis ARNOVA 2023"
+title: "Skills-for-care analysis Draft 1"
 author: "Meng Ye"
-date: "2024-03-01"
+date: "2024-04-04"
 output:
   word_document: default
   html_document: default
 ---
+
+Updated with newly derived variables
 
 ```{r contr}
 # environment setup to run ordered logit properly
@@ -41,85 +43,306 @@ cqc_skills <- read_rds(here("data","cleaned_sfc_ipw.rds"))
 ```
 
 
-
-
-
-
-## Modeling on rating with staff control
-
-```{r }
-model_order <- clm(rating ~ form  + category + region + during_covid,
-                data = filter(cqc_skills, domain == "Overall"),
-                link = "logit")
-
-model_order_weighted <- clm(rating ~ form + category + region + during_covid,
-                data = filter(cqc_skills, domain == "Overall"),
-                link = "logit",
-                weights = ipw)
-
-model_order_weighted2 <- clm(rating ~ form + category + region + during_covid,
-                data = filter(cqc_skills, domain == "Overall"),
-                link = "logit",
-                weights = ipw_short)
-
-
-model_staff <- lm(staff_level ~ form + category + region + during_covid,
-                data = filter(cqc_skills, domain == "Overall"))
-
-model_staff_weighted <- lm(staff_level ~ form + category + region + during_covid,
-                data = filter(cqc_skills, domain == "Overall"),
-                weights = ipw)
-
-staff_direct_order <- clm(rating ~ form + staff_level + category + region + during_covid,
-                data = filter(cqc_skills, domain == "Overall"),
-                link = "logit")
-staff_direct_order_weighted <- clm(rating ~ form + staff_level + category + region + during_covid,
-                data = filter(cqc_skills, domain == "Overall"),
-                link = "logit",
-                weights = ipw)
+```{r}
+cqc_skills %>% 
+  mutate(overall = ifelse(domain == "Overall", 1, 0)) %>% 
+  group_by(form) %>% 
+  summarize(count_rating_unit = sum(overall),
+            count_rating = n())
 ```
-
+```{r}
+nrow(cqc_skills)
+```
 
 
 
 ```{r}
-staff_models <- modelsummary(list("full" = model_order, "full weighted" = model_order_weighted, 
-                                  "full weighted 2" = model_order_weighted2, 
-                                    "staffing" = model_staff, "staffing weighted"= model_staff_weighted, 
-                                    "direct" = staff_direct_order, "direct weighted" = staff_direct_order_weighted),
-                               coef_omit = "region", exponentiate = F,
-                               statistic = "({p.value}) {stars}")
-staff_models
+summary(cqc_skills[, c("turnover", "turnover0", "staff_level", "staff_level0")])
 ```
 
-# Modeling on rating with turnover
+
+
+
+
+## Modeling on rating with new staffing variables
 
 ```{r }
+model_order_weighted <- clm(rating ~ form + service_type_selected + age + region + during_covid,
+                data = filter(cqc_skills, domain == "Overall"),
+                link = "logit",
+                weights = ipw)
 
-model_turnover <- lm(turnover ~ form + category + region + during_covid,
-                data = filter(cqc_skills, domain == "Overall"))
-
-model_turnover_weighted <- lm(turnover ~ form + category + region + during_covid,
+model_staff_weighted <- lm(staff_level ~ form + service_type_selected + age + region + during_covid,
                 data = filter(cqc_skills, domain == "Overall"),
                 weights = ipw)
 
-turnover_direct_order <- clm(rating ~ form + turnover + category + region + during_covid,
+staff_direct_order_weighted <- clm(rating ~ form + staff_level + service_type_selected + age + region + during_covid,
                 data = filter(cqc_skills, domain == "Overall"),
-                link = "logit")
-turnover_direct_order_weighted <- clm(rating ~ form + turnover + category + region + during_covid,
+                link = "logit",
+                weights = ipw)
+
+model_turnover_weighted <- lm(turnover ~ form + service_type_selected + age + region + during_covid,
+                data = filter(cqc_skills, domain == "Overall"),
+                weights = ipw)
+
+turnover_direct_order_weighted <- clm(rating ~ form + turnover + service_type_selected + age + region + during_covid,
                 data = filter(cqc_skills, domain == "Overall"),
                 link = "logit",
                 weights = ipw)
 ```
 
 
+## Modeling on rating with old staffing variables
+
+```{r }
+model_staff_weighted0 <- lm(staff_level0 ~ form + service_type_selected + age + region + during_covid,
+                data = filter(cqc_skills, domain == "Overall"),
+                weights = ipw)
+
+staff_direct_order_weighted0 <- clm(rating ~ form + staff_level0 + service_type_selected + age + region + during_covid,
+                data = filter(cqc_skills, domain == "Overall"),
+                link = "logit",
+                weights = ipw)
+
+model_turnover_weighted0 <- lm(turnover0 ~ form + service_type_selected + age + region + during_covid,
+                data = filter(cqc_skills, domain == "Overall"),
+                weights = ipw)
+
+turnover_direct_order_weighted0 <- clm(rating ~ form + turnover0 + service_type_selected + age + region + during_covid,
+                data = filter(cqc_skills, domain == "Overall"),
+                link = "logit",
+                weights = ipw)
+```
+
+
+## drive result tables
+
+### results table for new staffing variables 
+
+```{r}
+new_models <- modelsummary(list("full weighted" = model_order_weighted,  
+                                "staffing weighted"= model_staff_weighted,
+                                "staff direct weighted" = staff_direct_order_weighted,
+                                "turnover weighted"= model_turnover_weighted, 
+                                "turnover direct weighted" = turnover_direct_order_weighted),
+                               coef_omit = "region", exponentiate = F,
+                               statistic = "({p.value}) {stars}")
+new_models
+```
+### results table for oldstaffing variables
+```{r}
+old_models <- modelsummary(list("full weighted" = model_order_weighted,  
+                                "staffing weighted"= model_staff_weighted0,
+                                "staff direct weighted" = staff_direct_order_weighted0,
+                                "turnover weighted"= model_turnover_weighted0, 
+                                "turnover direct weighted" = turnover_direct_order_weighted0),
+                               coef_omit = "region", exponentiate = F,
+                               statistic = "({p.value}) {stars}")
+old_models
+```
+
+
+## Models for other domains
+
+
+
+"Overall","Safe","Effective", "Caring", "Well-led", "Responsive"
+
+### "Safe" domain 
+
+```{r }
+model_order_weighted_safe <- clm(rating ~ form + service_type_selected + age + region + during_covid,
+                data = filter(cqc_skills, domain == "Safe"),
+                link = "logit",
+                weights = ipw)
+
+model_staff_weighted_safe <- lm(staff_level ~ form + service_type_selected + age + region + during_covid,
+                data = filter(cqc_skills, domain == "Safe"),
+                weights = ipw)
+
+staff_direct_order_weighted_safe <- clm(rating ~ form + staff_level + service_type_selected + age + region + during_covid,
+                data = filter(cqc_skills, domain == "Safe"),
+                link = "logit",
+                weights = ipw)
+
+model_turnover_weighted_safe <- lm(turnover ~ form + service_type_selected + age + region + during_covid,
+                data = filter(cqc_skills, domain == "Safe"),
+                weights = ipw)
+
+turnover_direct_order_weighted_safe <- clm(rating ~ form + turnover + service_type_selected + age + region + during_covid,
+                data = filter(cqc_skills, domain == "Safe"),
+                link = "logit",
+                weights = ipw)
+```
+
+```{r}
+safe_models <- modelsummary(list("full weighted" = model_order_weighted_safe,  
+                                "staffing weighted"= model_staff_weighted_safe,
+                                "staff direct weighted" = staff_direct_order_weighted_safe,
+                                "turnover weighted"= model_turnover_weighted_safe, 
+                                "turnover direct weighted" = turnover_direct_order_weighted_safe),
+                               coef_omit = "region", exponentiate = F,
+                               statistic = "({p.value}) {stars}")
+safe_models
+```
+
+### "Effective domain"
+```{r }
+model_order_weighted_effective <- clm(rating ~ form + service_type_selected + age + region + during_covid,
+                data = filter(cqc_skills, domain == "Effective"),
+                link = "logit",
+                weights = ipw)
+
+model_staff_weighted_effective <- lm(staff_level ~ form + service_type_selected + age + region + during_covid,
+                data = filter(cqc_skills, domain == "Effective"),
+                weights = ipw)
+
+staff_direct_order_weighted_effective <- clm(rating ~ form + staff_level + service_type_selected + age + region + during_covid,
+                data = filter(cqc_skills, domain == "Effective"),
+                link = "logit",
+                weights = ipw)
+
+model_turnover_weighted_effective <- lm(turnover ~ form + service_type_selected + age + region + during_covid,
+                data = filter(cqc_skills, domain == "Effective"),
+                weights = ipw)
+
+turnover_direct_order_weighted_effective <- clm(rating ~ form + turnover + service_type_selected + age + region + during_covid,
+                data = filter(cqc_skills, domain == "Effective"),
+                link = "logit",
+                weights = ipw)
+```
 
 
 ```{r}
-staff_models <- modelsummary(list("full" = model_order, "full weighted" = model_order_weighted, 
-                                    "turnover" = model_turnover, "turnover weighted"= model_turnover_weighted, 
-                                    "direct" = turnover_direct_order, "direct weighted" = turnover_direct_order_weighted),
+effective_models <- modelsummary(list("full weighted" = model_order_weighted_effective,  
+                                "staffing weighted"= model_staff_weighted_effective,
+                                "staff direct weighted" = staff_direct_order_weighted_effective,
+                                "turnover weighted"= model_turnover_weighted_effective, 
+                                "turnover direct weighted" = turnover_direct_order_weighted_effective),
                                coef_omit = "region", exponentiate = F,
                                statistic = "({p.value}) {stars}")
-staff_models
+effective_models
 ```
+
+
+### "Caring" domain 
+
+```{r }
+model_order_weighted_caring <- clm(rating ~ form + service_type_selected + age + region + during_covid,
+                data = filter(cqc_skills, domain == "Caring"),
+                link = "logit",
+                weights = ipw)
+
+model_staff_weighted_caring <- lm(staff_level ~ form + service_type_selected + age + region + during_covid,
+                data = filter(cqc_skills, domain == "Caring"),
+                weights = ipw)
+
+staff_direct_order_weighted_caring <- clm(rating ~ form + staff_level + service_type_selected + age + region + during_covid,
+                data = filter(cqc_skills, domain == "Caring"),
+                link = "logit",
+                weights = ipw)
+
+model_turnover_weighted_caring <- lm(turnover ~ form + service_type_selected + age + region + during_covid,
+                data = filter(cqc_skills, domain == "Caring"),
+                weights = ipw)
+
+turnover_direct_order_weighted_caring <- clm(rating ~ form + turnover + service_type_selected + age + region + during_covid,
+                data = filter(cqc_skills, domain == "Caring"),
+                link = "logit",
+                weights = ipw)
+```
+
+
+```{r}
+caring_models <- modelsummary(list("full weighted" = model_order_weighted_caring,  
+                                "staffing weighted"= model_staff_weighted_caring,
+                                "staff direct weighted" = staff_direct_order_weighted_caring,
+                                "turnover weighted"= model_turnover_weighted_caring, 
+                                "turnover direct weighted" = turnover_direct_order_weighted_caring),
+                               coef_omit = "region", exponentiate = F,
+                               statistic = "({p.value}) {stars}")
+caring_models
+```
+
+### "Well-led" domain
+
+```{r }
+model_order_weighted_well_led <- clm(rating ~ form + service_type_selected + age + region + during_covid,
+                data = filter(cqc_skills, domain == "Well-led"),
+                link = "logit",
+                weights = ipw)
+
+model_staff_weighted_well_led <- lm(staff_level ~ form + service_type_selected + age + region + during_covid,
+                data = filter(cqc_skills, domain == "Well-led"),
+                weights = ipw)
+
+staff_direct_order_weighted_well_led <- clm(rating ~ form + staff_level + service_type_selected + age + region + during_covid,
+                data = filter(cqc_skills, domain == "Well-led"),
+                link = "logit",
+                weights = ipw)
+
+model_turnover_weighted_well_led <- lm(turnover ~ form + service_type_selected + age + region + during_covid,
+                data = filter(cqc_skills, domain == "Well-led"),
+                weights = ipw)
+
+turnover_direct_order_weighted_well_led <- clm(rating ~ form + turnover + service_type_selected + age + region + during_covid,
+                data = filter(cqc_skills, domain == "Well-led"),
+                link = "logit",
+                weights = ipw)
+```
+
+
+```{r}
+well_led_models <- modelsummary(list("full weighted" = model_order_weighted_well_led,  
+                                "staffing weighted"= model_staff_weighted_well_led,
+                                "staff direct weighted" = staff_direct_order_weighted_well_led,
+                                "turnover weighted"= model_turnover_weighted_well_led, 
+                                "turnover direct weighted" = turnover_direct_order_weighted_well_led),
+                               coef_omit = "region", exponentiate = F,
+                               statistic = "({p.value}) {stars}")
+well_led_models
+```
+
+
+### "Responsive" domain 
+
+```{r }
+model_order_weighted_responsive <- clm(rating ~ form + service_type_selected + age + region + during_covid,
+                data = filter(cqc_skills, domain == "Responsive"),
+                link = "logit",
+                weights = ipw)
+
+model_staff_weighted_responsive <- lm(staff_level ~ form + service_type_selected + age + region + during_covid,
+                data = filter(cqc_skills, domain == "Responsive"),
+                weights = ipw)
+
+staff_direct_order_weighted_responsive <- clm(rating ~ form + staff_level + service_type_selected + age + region + during_covid,
+                data = filter(cqc_skills, domain == "Responsive"),
+                link = "logit",
+                weights = ipw)
+
+model_turnover_weighted_responsive <- lm(turnover ~ form + service_type_selected + age + region + during_covid,
+                data = filter(cqc_skills, domain == "Responsive"),
+                weights = ipw)
+
+turnover_direct_order_weighted_responsive <- clm(rating ~ form + turnover + service_type_selected + age + region + during_covid,
+                data = filter(cqc_skills, domain == "Responsive"),
+                link = "logit",
+                weights = ipw)
+```
+
+
+```{r}
+responsive_models <- modelsummary(list("full weighted" = model_order_weighted_responsive,  
+                                "staffing weighted"= model_staff_weighted_responsive,
+                                "staff direct weighted" = staff_direct_order_weighted_responsive,
+                                "turnover weighted"= model_turnover_weighted_responsive, 
+                                "turnover direct weighted" = turnover_direct_order_weighted_responsive),
+                               coef_omit = "region", exponentiate = F,
+                               statistic = "({p.value}) {stars}")
+responsive_models
+```
+
+
+
+
