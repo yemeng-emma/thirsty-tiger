@@ -115,7 +115,7 @@ turnover_direct_order_weighted0 <- clm(rating ~ form + turnover0 + service_type_
 ```
 
 
-## drive result tables
+## derive result tables
 
 ### results table for new staffing variables 
 
@@ -130,6 +130,8 @@ new_models <- modelsummary(list("full weighted" = model_order_weighted,
 new_models
 ```
 ### results table for oldstaffing variables
+
+
 ```{r}
 old_models <- modelsummary(list("full weighted" = model_order_weighted,  
                                 "staffing weighted"= model_staff_weighted0,
