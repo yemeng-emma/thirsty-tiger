@@ -3,6 +3,16 @@
 /output
 /sandbox
 
+
+# Ignore HTML files
+*.html
+
+# Ignore PDF files
+*.pdf
+
+# Ignore Word files
+*.docx
+
 # History files
 .Rhistory
 .Rapp.history
