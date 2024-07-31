@@ -130,13 +130,28 @@ ipw_data <- augment_columns(model_select,
             mutate(ipw = (select_in / propensity) + (1 - select_in) / (1 - propensity)) %>% 
             select(establishmentid, ipw) %>% 
             filter(establishmentid != "NA") %>% 
-            group_by(factor(establishmentid)) %>% 
-            slice_head(n = 1) %>% 
+            group_by(establishmentid) %>% 
+            summarise(ipw = mean(ipw)) %>% 
             ungroup()
 
 nrow(ipw_data)
 ```
-The total count is for rating unit, not for establishment. The Skills for Care data for the same location-id will be duplicated for different measuring units. 
+
+
+```{r}
+augment_columns(model_select,
+                            cqc_overall,
+                            type.predict = "response") %>% 
+            rename(propensity = .fitted) %>% 
+            mutate(ipw = (select_in / propensity) + (1 - select_in) / (1 - propensity)) %>% 
+            select(establishmentid, ipw) %>% 
+            filter(establishmentid != "NA") %>% 
+            summarise(count = n(),
+                      unic = n_distinct(establishmentid)) 
+```
+
+The total count is for rating unit, not for establishment. The Skills for Care data for the same location-id will be duplicated for different measuring units. The unique establishment id is 6505. Only 2 duplicates. 
+
 
 ```{r checking repeated measureing unit}
 cqc |>
