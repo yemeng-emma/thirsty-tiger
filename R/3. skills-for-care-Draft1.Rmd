@@ -1,13 +1,18 @@
 ---
 title: "Skills-for-care analysis Draft 1"
 author: "Meng Ye"
-date: "2024-04-04"
+date: "2024-07-31"
 output:
-  word_document: default
   html_document: default
+  word_document: default
 ---
 
-Updated with newly derived variables
+7/31/2024 Add size (total stuff) control to the models.
+
+Updated with newly derived variables.
+
+
+
 
 ```{r contr}
 # environment setup to run ordered logit properly
@@ -59,7 +64,7 @@ nrow(cqc_skills)
 ```{r}
 summary(cqc_skills[, c("turnover", "turnover0", "staff_level", "staff_level0")])
 ```
-
+where "turnover0" and "staff_level0" denote the older/crude way to calculate the variables. 
 
 
 
@@ -67,55 +72,31 @@ summary(cqc_skills[, c("turnover", "turnover0", "staff_level", "staff_level0")])
 ## Modeling on rating with new staffing variables
 
 ```{r }
-model_order_weighted <- clm(rating ~ form + service_type_selected + age + region + during_covid,
+model_order_weighted <- clm(rating ~ form + care_home + age + totalstaff + region + during_covid,
                 data = filter(cqc_skills, domain == "Overall"),
                 link = "logit",
                 weights = ipw)
 
-model_staff_weighted <- lm(staff_level ~ form + service_type_selected + age + region + during_covid,
+model_staff_weighted <- lm(staff_level ~ form + care_home + age + totalstaff + region + during_covid,
                 data = filter(cqc_skills, domain == "Overall"),
                 weights = ipw)
 
-staff_direct_order_weighted <- clm(rating ~ form + staff_level + service_type_selected + age + region + during_covid,
-                data = filter(cqc_skills, domain == "Overall"),
-                link = "logit",
-                weights = ipw)
-
-model_turnover_weighted <- lm(turnover ~ form + service_type_selected + age + region + during_covid,
-                data = filter(cqc_skills, domain == "Overall"),
-                weights = ipw)
-
-turnover_direct_order_weighted <- clm(rating ~ form + turnover + service_type_selected + age + region + during_covid,
-                data = filter(cqc_skills, domain == "Overall"),
-                link = "logit",
-                weights = ipw)
-```
-
-
-## Modeling on rating with old staffing variables
-
-```{r }
-model_staff_weighted0 <- lm(staff_level0 ~ form + service_type_selected + age + region + during_covid,
-                data = filter(cqc_skills, domain == "Overall"),
-                weights = ipw)
-
-staff_direct_order_weighted0 <- clm(rating ~ form + staff_level0 + service_type_selected + age + region + during_covid,
+staff_direct_order_weighted <- clm(rating ~ form + staff_level + care_home + age + totalstaff + region + during_covid,
                 data = filter(cqc_skills, domain == "Overall"),
                 link = "logit",
                 weights = ipw)
 
-model_turnover_weighted0 <- lm(turnover0 ~ form + service_type_selected + age + region + during_covid,
+model_turnover_weighted <- lm(turnover ~ form + care_home + age + totalstaff + region + during_covid,
                 data = filter(cqc_skills, domain == "Overall"),
                 weights = ipw)
 
-turnover_direct_order_weighted0 <- clm(rating ~ form + turnover0 + service_type_selected + age + region + during_covid,
+turnover_direct_order_weighted <- clm(rating ~ form + turnover + care_home + age + totalstaff + region + during_covid,
                 data = filter(cqc_skills, domain == "Overall"),
                 link = "logit",
                 weights = ipw)
 ```
 
 
-## derive result tables
 
 ### results table for new staffing variables 
 
@@ -129,6 +110,118 @@ new_models <- modelsummary(list("full weighted" = model_order_weighted,
                                statistic = "({p.value}) {stars}")
 new_models
 ```
+
+
+## Derive coefficient plots
+
+```{r}
+
+# Tidy the models and filter out the threshold terms
+staff_tidied <- tidy(model_staff_weighted, conf.int = TRUE) %>%
+  filter(!term %in% c("(Intercept)", "Inadequate|Req improv", "Req improv|Good", "Good|Outstanding"))
+
+turnover_tidied <- tidy(model_turnover_weighted, conf.int = TRUE) %>%
+  filter(!term %in% c("(Intercept)", "Inadequate|Req improv", "Req improv|Good", "Good|Outstanding"))
+
+order_tidied <- tidy(model_order_weighted, conf.int = TRUE) %>%
+  filter(!term %in% c("(Intercept)", "Inadequate|Req improv", "Req improv|Good", "Good|Outstanding")) %>%
+  mutate(model = "Total effects")
+
+staff_direct_tidied <- tidy(staff_direct_order_weighted, conf.int = TRUE) %>%
+  filter(!term %in% c("(Intercept)", "Inadequate|Req improv", "Req improv|Good", "Good|Outstanding")) %>%
+  mutate(model = "Direct effects")
+
+# Combine order and staff direct models
+combined_tidied <- bind_rows(order_tidied, staff_direct_tidied)
+
+# Tidy the models and filter out the threshold terms
+turnover_tidied <- tidy(model_order_weighted, conf.int = TRUE) %>%
+  filter(!term %in% c("(Intercept)", "Inadequate|Req improv", "Req improv|Good", "Good|Outstanding")) %>%
+  mutate(model = "Total Effect")
+
+turnover_direct_tidied <- tidy(turnover_direct_order_weighted, conf.int = TRUE) %>%
+  filter(!term %in% c("(Intercept)", "Inadequate|Req improv", "Req improv|Good", "Good|Outstanding")) %>%
+  mutate(model = "Direct Effect")
+
+# Combine total effect and direct effect models
+combined_turnover_tidied <- bind_rows(turnover_tidied, turnover_direct_tidied)
+
+```
+
+
+
+```{r}
+ggplot(staff_tidied, aes(x = estimate, y = term)) +
+  geom_vline(xintercept = 0, color = "red", linetype = "dotted") +
+  geom_pointrange(aes(xmin = conf.low, xmax = conf.high)) + 
+  labs(x = "Coefficient estimate", y = NULL) +
+  theme_minimal() +
+  ggtitle("Staffing Weighted Model Coefficient Plot")
+
+```
+
+```{r}
+ggplot(turnover_tidied, aes(x = estimate, y = term)) +
+  geom_vline(xintercept = 0, color = "red", linetype = "dotted") +
+  geom_pointrange(aes(xmin = conf.low, xmax = conf.high)) + 
+  labs(x = "Coefficient estimate", y = NULL) +
+  theme_minimal() +
+  ggtitle("Turnover Weighted Model Coefficient Plot")
+
+```
+
+```{r}
+ggplot(combined_tidied, aes(x = estimate, y = term, color = model, shape = model)) +
+  geom_vline(xintercept = 0, color = "red", linetype = "dotted") +
+  geom_pointrange(aes(xmin = conf.low, xmax = conf.high), position = position_dodge(width = 0.5)) + 
+  labs(x = "Coefficient estimate", y = NULL) +
+  theme_minimal() +
+  ggtitle("Staffing Level: total effects and direct effects")
+
+```
+
+
+
+
+
+```{r}
+ggplot(combined_turnover_tidied, aes(x = estimate, y = term, color = model, shape = model)) +
+  geom_vline(xintercept = 0, color = "red", linetype = "dotted") +
+  geom_pointrange(aes(xmin = conf.low, xmax = conf.high), position = position_dodge(width = 0.5)) + 
+  labs(x = "Coefficient estimate", y = NULL) +
+  theme_minimal() +
+  ggtitle("Turnover: Total Effects and Direct Effects")
+
+```
+
+
+## Additional models
+
+### Modeling on rating with old staffing variables and different category
+
+```{r }
+model_staff_weighted0 <- lm(staff_level0 ~ form + service_type_selected + age + totalstaff + region + during_covid,
+                data = filter(cqc_skills, domain == "Overall"),
+                weights = ipw)
+
+staff_direct_order_weighted0 <- clm(rating ~ form + staff_level0 + service_type_selected + age + totalstaff + region + during_covid,
+                data = filter(cqc_skills, domain == "Overall"),
+                link = "logit",
+                weights = ipw)
+
+model_turnover_weighted0 <- lm(turnover0 ~ form + service_type_selected + age + totalstaff + region + during_covid,
+                data = filter(cqc_skills, domain == "Overall"),
+                weights = ipw)
+
+turnover_direct_order_weighted0 <- clm(rating ~ form + turnover0 + service_type_selected + age + totalstaff + region + during_covid,
+                data = filter(cqc_skills, domain == "Overall"),
+                link = "logit",
+                weights = ipw)
+```
+
+
+
+
 ### results table for oldstaffing variables
 
 
@@ -144,7 +237,7 @@ old_models
 ```
 
 
-## Models for other domains
+## Models for other domains (currently without totalstaff control)
 
 
 

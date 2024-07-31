@@ -136,7 +136,13 @@ ipw_data <- augment_columns(model_select,
 
 nrow(ipw_data)
 ```
+The total count is for rating unit, not for establishment. The Skills for Care data for the same location-id will be duplicated for different measuring units. 
 
+```{r checking repeated measureing unit}
+cqc |>
+ group_by(service_group) |>
+ summarize(count = n())
+```
 
 
 
