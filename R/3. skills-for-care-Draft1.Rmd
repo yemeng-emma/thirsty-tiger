@@ -69,7 +69,7 @@ where "turnover0" and "staff_level0" denote the older/crude way to calculate the
 
 
 
-## Modeling on rating with new staffing variables
+## Modelis Used / Reported
 
 ```{r }
 model_order_weighted <- clm(rating ~ form + care_home + age + totalstaff + region + during_covid,
@@ -101,11 +101,11 @@ turnover_direct_order_weighted <- clm(rating ~ form + turnover + care_home + age
 ### results table for new staffing variables 
 
 ```{r}
-new_models <- modelsummary(list("full weighted" = model_order_weighted,  
-                                "staffing weighted"= model_staff_weighted,
-                                "staff direct weighted" = staff_direct_order_weighted,
-                                "turnover weighted"= model_turnover_weighted, 
-                                "turnover direct weighted" = turnover_direct_order_weighted),
+new_models <- modelsummary(list("total effect" = model_order_weighted,  
+                                "staffing by sector"= model_staff_weighted,
+                                "direct effect: staffing control" = staff_direct_order_weighted,
+                                "turnover by sector"= model_turnover_weighted, 
+                                "direct effect: turnover control" = turnover_direct_order_weighted),
                                coef_omit = "region", exponentiate = F,
                                statistic = "({p.value}) {stars}")
 new_models
@@ -156,7 +156,7 @@ ggplot(staff_tidied, aes(x = estimate, y = term)) +
   geom_pointrange(aes(xmin = conf.low, xmax = conf.high)) + 
   labs(x = "Coefficient estimate", y = NULL) +
   theme_minimal() +
-  ggtitle("Staffing Weighted Model Coefficient Plot")
+  ggtitle("Staffing by sector Model Coefficient Plot")
 
 ```
 
@@ -166,7 +166,7 @@ ggplot(turnover_tidied, aes(x = estimate, y = term)) +
   geom_pointrange(aes(xmin = conf.low, xmax = conf.high)) + 
   labs(x = "Coefficient estimate", y = NULL) +
   theme_minimal() +
-  ggtitle("Turnover Weighted Model Coefficient Plot")
+  ggtitle("Turnover by Sector Model Coefficient Plot")
 
 ```
 
@@ -388,11 +388,11 @@ turnover_direct_order_weighted_well_led <- clm(rating ~ form + turnover + servic
 
 
 ```{r}
-well_led_models <- modelsummary(list("full weighted" = model_order_weighted_well_led,  
-                                "staffing weighted"= model_staff_weighted_well_led,
-                                "staff direct weighted" = staff_direct_order_weighted_well_led,
-                                "turnover weighted"= model_turnover_weighted_well_led, 
-                                "turnover direct weighted" = turnover_direct_order_weighted_well_led),
+well_led_models <- modelsummary(list("total effect" = model_order_weighted_well_led,  
+                                "staffing by sector"= model_staff_weighted_well_led,
+                                "direct effect: staffing control" = staff_direct_order_weighted_well_led,
+                                "turnover by sector"= model_turnover_weighted_well_led, 
+                                "direct effect: turnover control" = turnover_direct_order_weighted_well_led),
                                coef_omit = "region", exponentiate = F,
                                statistic = "({p.value}) {stars}")
 well_led_models
