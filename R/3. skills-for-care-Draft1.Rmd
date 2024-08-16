@@ -3,8 +3,8 @@ title: "Skills-for-care analysis Draft 1"
 author: "Meng Ye"
 date: "2024-07-31"
 output:
-  html_document: default
   word_document: default
+  html_document: default
 ---
 
 7/31/2024 Add size (total stuff) control to the models.
@@ -16,7 +16,8 @@ Updated with newly derived variables.
 
 ```{r contr}
 # environment setup to run ordered logit properly
-options(contrasts = rep("contr.treatment", 2))
+options(contrasts = rep("contr.treatment", 2),
+        scipen = 999)
 ```
 
 
@@ -111,6 +112,17 @@ new_models <- modelsummary(list("total effect" = model_order_weighted,
 new_models
 ```
 
+```{r}
+new_models_exp <- modelsummary(list("total effect" = model_order_weighted,  
+                                "staffing by sector"= model_staff_weighted,
+                                "direct effect: staffing control" = staff_direct_order_weighted,
+                                "turnover by sector"= model_turnover_weighted, 
+                                "direct effect: turnover control" = turnover_direct_order_weighted),
+                               coef_omit = "region|\\(Intercept\\)", exponentiate = T,
+                               statistic = "({p.value}) {stars}")
+new_models_exp
+```
+
 
 ## Derive coefficient plots
 
@@ -118,33 +130,34 @@ new_models
 
 # Tidy the models and filter out the threshold terms
 staff_tidied <- tidy(model_staff_weighted, conf.int = TRUE) %>%
-  filter(!term %in% c("(Intercept)", "Inadequate|Req improv", "Req improv|Good", "Good|Outstanding"))
+  filter(!term %in% c("(Intercept)", "Inadequate|Req improv", "Req improv|Good", "Good|Outstanding")) %>%
+  filter(!str_detect(term, "^region"))
 
 turnover_tidied <- tidy(model_turnover_weighted, conf.int = TRUE) %>%
-  filter(!term %in% c("(Intercept)", "Inadequate|Req improv", "Req improv|Good", "Good|Outstanding"))
+  filter(!term %in% c("(Intercept)", "Inadequate|Req improv", "Req improv|Good", "Good|Outstanding")) %>%
+  filter(!str_detect(term, "^region"))
 
 order_tidied <- tidy(model_order_weighted, conf.int = TRUE) %>%
   filter(!term %in% c("(Intercept)", "Inadequate|Req improv", "Req improv|Good", "Good|Outstanding")) %>%
+  filter(!str_detect(term, "^region")) %>%
   mutate(model = "Total effects")
 
 staff_direct_tidied <- tidy(staff_direct_order_weighted, conf.int = TRUE) %>%
   filter(!term %in% c("(Intercept)", "Inadequate|Req improv", "Req improv|Good", "Good|Outstanding")) %>%
+  filter(!str_detect(term, "^region")) %>%
   mutate(model = "Direct effects")
-
-# Combine order and staff direct models
-combined_tidied <- bind_rows(order_tidied, staff_direct_tidied)
-
-# Tidy the models and filter out the threshold terms
-turnover_tidied <- tidy(model_order_weighted, conf.int = TRUE) %>%
-  filter(!term %in% c("(Intercept)", "Inadequate|Req improv", "Req improv|Good", "Good|Outstanding")) %>%
-  mutate(model = "Total Effect")
 
 turnover_direct_tidied <- tidy(turnover_direct_order_weighted, conf.int = TRUE) %>%
   filter(!term %in% c("(Intercept)", "Inadequate|Req improv", "Req improv|Good", "Good|Outstanding")) %>%
+  filter(!str_detect(term, "^region")) %>%
   mutate(model = "Direct Effect")
 
+# Combine order and staff direct models
+combined_staff_tidied <- bind_rows(order_tidied, staff_direct_tidied)
+
+
 # Combine total effect and direct effect models
-combined_turnover_tidied <- bind_rows(turnover_tidied, turnover_direct_tidied)
+combined_turnover_tidied <- bind_rows(order_tidied, turnover_direct_tidied)
 
 ```
 
@@ -156,7 +169,7 @@ ggplot(staff_tidied, aes(x = estimate, y = term)) +
   geom_pointrange(aes(xmin = conf.low, xmax = conf.high)) + 
   labs(x = "Coefficient estimate", y = NULL) +
   theme_minimal() +
-  ggtitle("Staffing by sector Model Coefficient Plot")
+  ggtitle("Staffing by Sector Model Coefficient Plot")
 
 ```
 
@@ -171,7 +184,7 @@ ggplot(turnover_tidied, aes(x = estimate, y = term)) +
 ```
 
 ```{r}
-ggplot(combined_tidied, aes(x = estimate, y = term, color = model, shape = model)) +
+ggplot(combined_staff_tidied, aes(x = estimate, y = term, color = model, shape = model)) +
   geom_vline(xintercept = 0, color = "red", linetype = "dotted") +
   geom_pointrange(aes(xmin = conf.low, xmax = conf.high), position = position_dodge(width = 0.5)) + 
   labs(x = "Coefficient estimate", y = NULL) +
