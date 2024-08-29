@@ -67,7 +67,19 @@ summary(cqc_skills[, c("turnover", "turnover0", "staff_level", "staff_level0")])
 ```
 where "turnover0" and "staff_level0" denote the older/crude way to calculate the variables. 
 
+```{r}
+cqc_skills %>% 
+  group_by(form) %>% 
+  summarise(count_establishment = n_distinct(establishmentid),
+            count_rating = n())
+```
 
+
+
+
+```{r}
+datasummary(inherited + during_covid + care_home ~ Percent(), data = cqc_skills)
+```
 
 
 ## Modelis Used / Reported
